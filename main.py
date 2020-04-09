@@ -1,212 +1,414 @@
-import pygame, random
+import pygame, random, math, sys, os, pathlib
 
 from pygame.locals import *
 
-pygame.init()
+from collections import deque
 
-#############
-# Objects
-#############
+# Temp globals
+
+vector = pygame.math.Vector2
+
+displayWidth = 1024
+
+displayHeight = 768
+
+tiles = 32
+
+gridWidth = displayWidth // tiles
+
+gridHeight = displayHeight // tiles
+
+def getImageOrientation(orientation):
+
+    # Scale to 200%
+
+    imagesFolder = os.path.join(pathlib.Path(__file__).parent.absolute(), 'images')
+
+    orientedImages = os.path.join(imagesFolder, orientation)
+
+    return pygame.image.load(os.path.join(orientedImages, '4.png')).convert_alpha()
+
+# The basic framework of this code was heavily adapted from tutorial http://kidscancode.org/lessons/
+class Game:
+
+    def __init__(self):
+
+        pygame.init()
+
+        # Fullscreen display
+
+        # screen = pygame.display.set_mode([0, 0], pygame.FULLSCREEN)
+
+        self.display = pygame.display.set_mode([displayWidth, displayHeight])
+
+        self.clock = pygame.time.Clock()
+
+        self.loadMap()
+
+    def loadMap(self):
+
+        folder = os.path.dirname(__file__)
+
+        self.room = []
+
+        with open(os.path.join(folder, 'room1.txt'), 'rt') as f:
+
+            for line in f:
+
+                self.room.append(line)
+
+    def initializeGame(self):
+
+        self.allSprites = pygame.sprite.Group()
+
+        self.enemies = pygame.sprite.Group()
+
+        self.obstacles = pygame.sprite.Group()
+
+        self.weapons = pygame.sprite.Group()
+
+        for row, tiles in enumerate(self.room):
+
+            for col, tile in enumerate(tiles):
+
+                if tile == '0':
+
+                    self.player = Player(self, col, row)
+
+                elif tile == '1':
+
+                    Obstacle(self, col, row)
+
+                elif tile == '2':
+
+                    Enemy(self, col, row)
+
+    def newGame(self):
+
+        self.running = True
+
+        while self.running:
+
+            # Control
+            self.events()
+
+            # Model
+            self.update()
+
+            # View
+            self.draw()
+
+            self.clock.tick(60)
+
+    def quitGame(self):
+
+        pygame.quit()
+
+        sys.exit()
+
+    def events(self):
+    
+        for event in pygame.event.get():
+
+            if event.type == pygame.QUIT:
+
+                self.quitGame()
+
+            elif event.type == KEYDOWN:
+
+                if event.key == K_ESCAPE:
+
+                    self.quitGame()
+
+            elif event.type == MOUSEBUTTONDOWN:
+
+                Spear(self, self.player)
+
+        pressedKeys = pygame.key.get_pressed()
+
+        self.player.move(pressedKeys)
+
+
+    def update(self):
+
+        self.allSprites.update()
+
+        # Attack hits
+
+        hits = pygame.sprite.groupcollide(self.enemies, self.weapons, False, True)
+
+        for hit in hits:
+
+            hit.kill()
+
+    def drawGrid(self):
+
+        for x in range(0, displayWidth, tiles):
+
+            pygame.draw.line(self.display, (100, 100, 100), (x, 0), (x, displayHeight))
+
+        for y in range(0, displayHeight, tiles):
+
+            pygame.draw.line(self.display, (100, 100, 100), (0, y), (displayWidth, y))
+
+    def draw(self):
+
+        self.display.fill((255, 255, 255))
+
+        self.drawGrid()
+
+        self.allSprites.draw(self.display)
+
+        pygame.display.flip()
+
+##########
+# Classes
+##########
 
 class Player(pygame.sprite.Sprite):
 
-    def __init__(self):
+    def __init__(self, game, x, y):
 
-        super(Player, self).__init__()
+        self.groups = game.allSprites
 
-        self.surf = pygame.Surface((100, 100))
+        pygame.sprite.Sprite.__init__(self, self.groups)
 
-        self.surf.fill((0, 0, 0))
+        self.game = game
 
-        self.rect = self.surf.get_rect()
+        self.orientation = 'facingDown'
 
-    def update(self, pressedKeys):
-        
-        dx = 0
+        self.image = getImageOrientation(self.orientation)
 
-        dy = 0
+        self.rect = self.image.get_rect()
+
+        self.rotation = 0
+
+        self.vel = vector(0, 0)
+
+        self.pos = vector(x, y) * tiles
+
+    def move(self, pressedKeys):
+
+        self.vel = vector(0, 0)
 
         if pressedKeys[K_w]:
 
-            dy = -5
+            self.orientation = 'facingUp'
 
-            self.rect.move_ip(dx, dy)
+            self.vel.y = -250
 
-        elif pressedKeys[K_s]:
+        if pressedKeys[K_s]:
 
-            dy = 5
+            self.orientation = 'facingDown'
 
-            self.rect.move_ip(dx, dy)
+            self.vel.y = 250
 
-        elif pressedKeys[K_a]:
+        if pressedKeys[K_a]:
 
-            dx = -5
+            self.orientation = 'facingLeft'
 
-            self.rect.move_ip(dx, dy)
+            self.vel.x = -250
 
-        elif pressedKeys[K_d]:
+        if pressedKeys[K_d]:
 
-            dx = 5
+            self.orientation = 'facingRight'
 
-            self.rect.move_ip(dx, dy)
+            self.vel.x = 250
 
-        if self.obstacleCollide():
+        if self.vel.x != 0 and self.vel.y != 0:
 
-            self.rect.move_ip(-dx, -dy)
+            self.vel *= math.sqrt(2) / 2
 
-        # Bound checking
-        if self.rect.left < 0:
-            
-            self.rect.left = 0
+    def obstacleCollide(self, moveDirection):
 
-        elif self.rect.right > displayWidth:
+        collision = pygame.sprite.spritecollide(self, self.game.obstacles, False)
 
-            self.rect.right = displayWidth
+        if moveDirection == 'dx':
 
-        if self.rect.top <= 0:
+            if collision:
 
-            self.rect.top = 0
+                if self.vel.x > 0:
+                
+                    self.pos.x = collision[0].rect.left - self.rect.width
 
-        elif self.rect.bottom >= displayHeight:
+                elif self.vel.x < 0:
 
-            self.rect.bottom = displayHeight
+                    self.pos.x = collision[0].rect.right
 
-    def obstacleCollide(self):
+                self.vel.x = 0
 
-        if pygame.sprite.spritecollideany(player, obstacles):
+                self.rect.x = int(self.pos.x)
 
-            return True
+        elif moveDirection == 'dy':
 
-        return False
+            if collision:
+
+                if self.vel.y > 0:
+                
+                    self.pos.y = collision[0].rect.top - self.rect.height
+
+                elif self.vel.y < 0:
+
+                    self.pos.y = collision[0].rect.bottom
+
+                self.vel.y = 0
+
+                self.rect.y = int(self.pos.y)
+
+    def update(self):
+
+        frameTime = self.game.clock.get_time() / 1000
+
+        self.image = getImageOrientation(self.orientation)
+
+        self.pos += self.vel * frameTime
+
+        self.rect.x = int(self.pos.x)
+
+        self.obstacleCollide('dx')
+
+        self.rect.y = int(self.pos.y)
+
+        self.obstacleCollide('dy')
 
 class Enemy(pygame.sprite.Sprite):
 
-    def __init__(self):
+    def __init__(self, game, x, y):
 
-        super(Enemy, self).__init__()
+        self.groups = game.allSprites, game.enemies
 
-        self.surf = pygame.Surface((50, 50))
+        pygame.sprite.Sprite.__init__(self, self.groups)
 
-        self.surf.fill((255, 0, 0))
+        self.game = game
+        
+        self.image = getImageOrientation('facingUp')
 
-        self.rect = self.surf.get_rect(
-            center = (
-                displayWidth - 50,
-                displayHeight - 50
-            )
+        self.rect = self.image.get_rect()
 
-        )
+        self.pos = vector(x, y) * tiles
+
+        self.vel = vector(0, -10)
+
+        self.rect.center = self.pos
+
+    def update(self):
+
+        frameTime = self.game.clock.get_time() / 1000
+
+        self.pos += self.vel * frameTime
+
+        self.rect.y = int(self.pos.y)
+
+        collision = pygame.sprite.spritecollide(self, self.game.obstacles, False)
+
+        if collision:
+
+            self.image = getImageOrientation('facingDown')
+
+            if self.vel.y > 0:
+
+                self.pos.y = collision[0].rect.top - self.rect.height
+
+            else:
+
+                self.pos.y = collision[0].rect.bottom
+
+            self.vel *= -1
 
 class Obstacle(pygame.sprite.Sprite):
 
-    def __init__(self):
+    def __init__(self, game, x, y):
 
-        super(Obstacle, self).__init__()
+        self.groups = game.allSprites, game.obstacles
 
-        self.surf = pygame.Surface((500, 500))
+        pygame.sprite.Sprite.__init__(self, self.groups)
 
-        self.surf.fill((0, 0, 255))
+        self.game = game
 
-        self.rect = self.surf.get_rect(
-            center = (
-                (displayWidth - 250)//2,
-                (displayHeight - 250)//2
-            )
-        )
+        folder = os.path.dirname(__file__)
+        images = os.path.join(folder, 'images')
+        caveImages = os.path.join(images, 'Cave')
+
+        self.image = pygame.image.load(os.path.join(caveImages, '0.png')).convert_alpha()
+
+        self.rect = self.image.get_rect()
+
+        self.pos = vector(x, y) * tiles
+
+        self.rect.topleft = self.pos
+
+# Replace with sword eventually
+class Spear(pygame.sprite.Sprite):
+
+    def __init__(self, game, player):
+
+        self.groups = game.allSprites, game.weapons
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.player = player
+
+        self.direction = player.orientation
+
+        folder = os.path.dirname(__file__)
+        images = os.path.join(folder, 'images')
+        self.originalImage = os.path.join(images, 'spear.png')
+
+        self.image = pygame.image.load(self.originalImage).convert_alpha()
+
+        self.rect = self.image.get_rect()
+
+        self.pos = self.player.pos
+
+        self.rect.topleft = self.pos
+
+        self.spawnTime = pygame.time.get_ticks()
+
+    def update(self):
+
+        # Spear img is wierd, have to rotate 60 degrees to get it oriented with character, (draw own spear?)
+
+        if self.direction == 'facingDown':
+
+            offset = vector(0, 30)
+
+            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert_alpha(), 240)
+
+        elif self.direction == 'facingUp':
+
+            offset = vector(-10, -30)
+
+            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert_alpha(), 60)
+
+        elif self.direction == 'facingRight':
+
+            offset = vector(20, -10)
+
+            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert_alpha(), 330)
+
+        elif self.direction == 'facingLeft':
+
+            offset = vector(-50, 0)
+
+            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert_alpha(), 150)
+
+        self.rect.topleft = self.player.pos + offset
+
+        if (pygame.time.get_ticks() - self.spawnTime > 100):
+
+            # attacks go through walls, maybe kill on obstacle collide?
+
+            self.kill()
 
 
-###########
-# Display
-###########
+# Run the game
 
+game = Game()
 
-# Fullscreen display
+while True:
 
-# screen = pygame.display.set_mode([0, 0], pygame.FULLSCREEN)
+    game.initializeGame()
 
-displayWidth, displayHeight = 1500, 1000
-
-screen = pygame.display.set_mode([displayWidth, displayHeight])
-
-
-##################
-# Initialization
-##################
-
-
-clock = pygame.time.Clock()
-
-player = Player()
-
-obstacle1 = Obstacle()
-
-obstacles = pygame.sprite.Group()
-
-obstacles.add(obstacle1)
-
-enemy1 = Enemy()
-
-enemies = pygame.sprite.Group()
-
-enemies.add(enemy1)
-
-allSprites = pygame.sprite.Group()
-
-allSprites.add(player)
-
-allSprites.add(obstacle1)
-
-allSprites.add(enemy1)
-
-
-############
-# Game Loop
-############
-
-
-running = True
-
-while running:
-
-    for event in pygame.event.get():
-
-        # Checks if a key is pressed
-        if event.type == KEYDOWN:
-
-            # Closes on escape key press
-            if event.key == K_ESCAPE:
-                
-                running = False
-
-        # Checks for window closure
-        if event.type == pygame.QUIT:
-
-            running = False
-
-    # Grabs the currently pressed keys
-    pressedKeys = pygame.key.get_pressed()
-
-    # Updates sprite based on input
-    player.update(pressedKeys)
-
-    # Make background white
-    screen.fill((255, 255, 255))
-
-    for sprite in allSprites:
-        
-        screen.blit(sprite.surf, sprite.rect)
-
-    if pygame.sprite.spritecollideany(player, enemies):
-
-        player.kill()
-
-        running = False
-
-    # Update the display
-    pygame.display.flip()
-
-    # runs the loop at 60fps
-    clock.tick(60)
-
-pygame.quit()
-
+    game.newGame()
