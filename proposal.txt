@@ -1,0 +1,47 @@
+Project Description:
+
+    Term Project Name: 
+
+    Description: A Legend of Zelda type 2-D Game. Gameplay focuses on progressing past rooms while defeating enemies and solving puzzles
+
+Competitive Analysis:
+
+    This game has very similar gameplay to The Legend of Zelda: A Link to the Past. Due to the massive popularity of The Legend of Zelda, 
+    there are large amounts of similar games created online. Flash games like the Hands of War series, which has very similar game play
+    and mechanics to this term project are examples of the top-down 2d adventire game this project aims to be.
+
+    Another similar game would be The Enchanted Cave 2 (https://armorgames.com/play/17682/the-enchanted-cave-2), while game play is different,
+    the weapons used, the obstacle, enemy, and dungeon design are very similar to the ideas in this project.
+
+    My project will have similar mechanics to the games mentioned above, with a top-down 2d view, melee weapons, ranged weapons, enemies 
+    to fight and puzzles as well as a boss. However, there will be one main weapon and a secondary weapon that can be switched out, instead
+    of a myriad of abilities and weapons to select from. The term project will also have a more lenient game over system, with death respawning
+    you as you were at the beginning of the room instead of sending you all the way back to a checkpoint like many of these games do. Additionally,
+    the difficulty will be higher due to the more lenient death penalities.
+
+Structural plan:
+
+    The term project will be organized into two folders, sprites and game code, with text files outside of the folders. The sprites folder will hold all of the
+    artwork used in the project separated by category (Background, wall, obstacle, enemy, player, etc.) and the game folder will hold all of the code in the game.
+    The game folder will be separated into the main game file and the interactables (player, enemy, weapons). The folder will also contain another folder called rooms,
+    which simply stores tilemaps of all the rooms in the game.
+
+Algorithmic Plan:
+
+    The trickiest part of the project will be the enemy AI design and the way in which the player can interact (kill) them. Basic enemy AI will use Breadth First Search
+    to find the shortest path to the player. More complicated enemies will attempy to reroute their way to the player based off of the basic enemy AI. Ranged enemies will
+    attempt to stay away from the player to launch attacks with saftey. The Boss AI will be an amalglation of the enemy AI's. The Boss will be the most complex enemy, but
+    the components will be in place from the simpler enemies which have a basis in the Breadth First Search that the basic enemies have implemented.
+
+Timeline Plan:
+
+    I intend to complete most enemy AI's by Checkpoint 5, and then additional weapons by TP2. From there, I plan to work on getting sprites and background art in place until Checkpoint 7.
+    Then additional gameplay ideas and weapon improvements will be made until TP3.
+
+Version Control Plan:
+
+    This term project is backed up on github. With commits at least once between each checkpoint.
+
+    Image Link: 
+
+Module List: Pygame
