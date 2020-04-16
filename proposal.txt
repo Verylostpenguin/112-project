@@ -42,6 +42,6 @@ Version Control Plan:
 
     This term project is backed up on github. With commits at least once between each checkpoint.
 
-    Image Link: 
+    Image Link: https://gyazo.com/3b11e6095a8324af16c6969cc2eeea31
 
 Module List: Pygame
