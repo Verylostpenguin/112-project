@@ -1,11 +1,13 @@
-import pygame, random, math, sys, os, pathlib
+import pygame, random, math, sys, os, pathlib, copy
 
-from collections import deque, Counter
+from collections import deque
 
 from pygame.locals import *
 
 # Images found at this site
 # https://opengameart.org/content/zelda-like-tilesets-and-sprites
+# https://opengameart.org/content/rotating-arrow-projectile
+# https://opengameart.org/content/light-weapons-pixel-art
 
 # Temp globals
 
@@ -64,7 +66,17 @@ class Game:
 
     def initializeGame(self):
 
+        self.lastWeaponSpawn = pygame.time.get_ticks()
+
+        self.cooldown = 1000
+
+        self.openInventory = False
+
+        self.currentWeapon = 'Bow'
+
         self.allSprites = pygame.sprite.Group()
+
+        self.friendlies = pygame.sprite.Group()
 
         self.enemies = pygame.sprite.Group()
 
@@ -94,7 +106,7 @@ class Game:
 
                 elif tile == '2':
 
-                    Enemy(self, col, row)
+                    BasicEnemy(self, col, row)
 
                 elif tile == '3':
 
@@ -104,9 +116,13 @@ class Game:
 
                 elif tile == '4':
 
+                    RangedEnemy(self, col, row)
+
+                elif tile == '5':
+
                     self.boss = Boss(self, col, row)
 
-        self.adjustmentPath = Counter()
+        self.adjustmentPath = dict()
 
         for row, tiles in enumerate(self.room):
 
@@ -151,15 +167,57 @@ class Game:
 
                     self.quitGame()
 
+                elif event.key == K_e:
+
+                    self.openInventory = not self.openInventory
+
             elif event.type == MOUSEBUTTONDOWN:
 
+                time = pygame.time.get_ticks()
+
                 if event.button == 1:
+
+                    self.player.swing()
 
                     Sword(self, self.player)
 
                 elif event.button == 3:
 
-                    Spear(self, self.player)
+                    if time - self.lastWeaponSpawn >= self.cooldown:
+
+                        self.lastWeaponSpawn = time
+
+                        if self.currentWeapon == 'Spear':
+
+                            Spear(self, self.player)
+
+                        elif self.currentWeapon == 'Bow':
+
+                            self.player.bow()
+
+                            if self.player.arrowCount > 0:
+
+                                self.player.arrowCount -= 1
+
+                                Arrow(self, self.player)
+
+                        elif self.currentWeapon == 'Magic':
+
+                            if self.player.mana > 0:
+
+                                self.player.mana -= 10
+
+                                self.magic = Magic(self, self.player)
+
+                elif event.button == 2:
+
+                    if self.player.spikeCount > 0:
+
+                        self.player.spikeCount -= 1
+
+                        Spikes(self, self.player)
+
+        self.mousePos = pygame.mouse.get_pos()
 
         pressedKeys = pygame.key.get_pressed()
 
@@ -167,21 +225,31 @@ class Game:
 
         # Add self.adjustmentPath
 
-        self.path = self.breadthFirstSearch(self.player.pos // tiles)
+        self.path = self.mergeDictionaries(self.breadthFirstSearch(self.player.pos // tiles),self.adjustmentPath)
 
     def update(self):
 
-        self.allSprites.update()
+        if self.openInventory:
 
-        # Attack hits
+            pass
 
-        pygame.sprite.groupcollide(self.mobs, self.weapons, True, False)
+        else:
 
-        hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
+            self.allSprites.update()
 
-        for hit in hits:
+            # Attack hits
 
-            self.running = False
+            hits = pygame.sprite.groupcollide(self.mobs, self.weapons, False, False)
+
+            for enemy, weapon in hits.items():
+
+                enemy.health -= weapon[0].damage
+
+            hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
+
+            for hit in hits:
+
+                self.player.health -= hit.damage
 
     def drawGrid(self):
 
@@ -193,13 +261,51 @@ class Game:
 
             pygame.draw.line(self.display, (100, 100, 100), (0, y), (displayWidth, y))
 
+    def drawInventory(self):
+
+        pygame.draw.line(self.display, (100, 100, 100), (700, 0), (700, displayHeight))
+
+        playerStatBox = pygame.Rect(700, 0, 324, 400)
+
+        healthText = pygame.font.Font(None, 40)
+
+        health = healthText.render(f'Health: {self.player.health}', True, (0, 0, 0))
+
+        manaText = pygame.font.Font(None, 40)
+
+        mana = manaText.render(f'Mana: {self.player.mana}', True, (0, 0, 0))
+
+        arrowText = pygame.font.Font(None, 40)
+
+        arrows = arrowText.render(f'Arrows: {self.player.arrowCount}', True, (0, 0, 0))
+
+        spikeText = pygame.font.Font(None, 40)
+
+        spikes = spikeText.render(f'Spikes: {self.player.spikeCount}', True, (0, 0, 0))        
+
+        pygame.draw.rect(self.display, (0, 0, 0), playerStatBox, 2)
+
+        self.display.blit(health, (800, 50))
+
+        self.display.blit(mana, (800, 100))
+
+        self.display.blit(arrows, (800, 150))
+
+        self.display.blit(spikes, (800, 200))
+
     def draw(self):
 
         self.display.fill((255, 255, 255))
 
-        self.drawGrid()
+        if self.openInventory:
 
-        self.allSprites.draw(self.display)
+            self.drawInventory()
+
+        else:
+
+            self.drawGrid()
+
+            self.allSprites.draw(self.display)
 
         pygame.display.flip()
 
@@ -215,7 +321,7 @@ class Game:
 
             if newTile in self.walls:
 
-                adjustment -= connection * 0.1
+                adjustment -= connection * 0.25
 
         return adjustment
 
@@ -240,6 +346,26 @@ class Game:
     def vectorToInteger(self, vector):
 
         return (int(vector.x), int(vector.y))
+
+    def mergeDictionaries(self, dict1, dict2):
+
+        newDict = copy.deepcopy(dict1)
+
+        for key, value in dict1.items():
+
+            # if math.abs(value.x) < math.abs(dict2[key].x):
+            #
+            #     newDict[key].x = 0
+            #
+            # if math.abs(value.y) < math.abs(dict2[key].y):
+            #
+            #     newDict[key].y = 0
+            
+            newDict[key] = value + dict2[key]
+
+        return newDict
+
+    # From kidscancode.org/lessons/
 
     def breadthFirstSearch(self, start):
 
@@ -273,7 +399,7 @@ class Player(pygame.sprite.Sprite):
 
     def __init__(self, game, x, y):
 
-        self.groups = game.allSprites
+        self.groups = game.allSprites, game.friendlies
 
         pygame.sprite.Sprite.__init__(self, self.groups)
 
@@ -292,6 +418,12 @@ class Player(pygame.sprite.Sprite):
         self.pos = vector(x, y) * tiles
 
         self.health = 100
+
+        self.arrowCount = 10
+
+        self.mana = 100
+
+        self.spikeCount = 5
 
     def move(self, pressedKeys):
 
@@ -361,7 +493,21 @@ class Player(pygame.sprite.Sprite):
 
                 self.rect.y = int(self.pos.y)
 
+    def bow(self):
+
+        pass
+
+    def swing(self):
+
+        pass
+
     def update(self):
+
+        if self.health <= 0:
+
+            self.kill()
+
+            self.game.running = False
 
         frameTime = self.game.clock.get_time() / 1000
 
@@ -377,7 +523,7 @@ class Player(pygame.sprite.Sprite):
 
         self.obstacleCollide('dy')
 
-class Enemy(pygame.sprite.Sprite):
+class BasicEnemy(pygame.sprite.Sprite):
 
     def __init__(self, game, x, y):
 
@@ -391,31 +537,129 @@ class Enemy(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect()
 
+        self.vel = vector(0, 0)
+
         self.pos = vector(x, y) * tiles
 
         self.rect.center = self.pos
 
-        self.health = 50
+        self.health = 100
+
+        self.damage = 25
 
     def update(self):
 
-        frameTime = self.game.clock.get_time() / 1000
+        if self.health <= 0:
+
+            self.kill()
 
         try:        
 
-            self.vel = self.game.path[game.vectorToInteger(self.pos // tiles)]
+            self.acceleration = self.game.path[game.vectorToInteger(self.pos // tiles)]
 
         except:
 
-            self.vel = vector(0, 0)
+            self.acceleration = vector(0, 0)
 
-        self.pos += self.vel * 2
+        self.vel += self.acceleration
+
+        self.vel = vector.normalize(self.vel)
+
+        self.pos += self.vel * 10
+
+        self.rect.center = self.pos
+
+class RangedEnemy(pygame.sprite.Sprite):
+
+    def __init__(self, game, x, y):
+
+        self.groups = game.allSprites, game.enemies, game.mobs
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.image = getImageOrientation('Down')
+
+        self.rect = self.image.get_rect()
+
+        self.vel = vector(0, 0)
+
+        self.pos = vector(x, y) * tiles
+
+        self.rect.center = self.pos
+
+        self.health = 75
+
+        self.damage = 20
+
+        self.lastAttack = pygame.time.get_ticks()
+
+        self.fireRate = 3000
+
+    def attack(self):
+
+        self.lastAttack = pygame.time.get_ticks()
+
+        self.attackDir = vector.normalize(self.game.player.pos - self.pos)
+
+        EnemyProjectile(self.game, self, self.attackDir)
+
+    def lineOfSight(self):
+
+        sightLine = pygame.draw.line(self.game.display, (0, 0, 0), self.pos, self.game.player.pos)
+
+        for wall in self.game.obstacles:
+
+            if sightLine.colliderect(wall.rect):
+
+                return False
+
+        return True
+
+    def update(self):
+
+        if self.health <= 0:
+
+            self.kill()
+
+        self.playerSeen = self.lineOfSight()
+
+        try:     
+
+            if (pygame.time.get_ticks() - self.lastAttack >= self.fireRate) and (
+                self.playerSeen
+            ):
+
+                self.attack()
+
+            if not self.playerSeen:
+
+                self.acceleration = self.game.path[game.vectorToInteger(self.pos // tiles)]
+
+            else:
+
+                self.acceleration = vector(0, 0)
+
+                self.vel = vector(0, 0)
+
+        except:
+
+            self.acceleration = vector(0, 0)
+
+        self.vel += self.acceleration
+
+        if self.vel != vector(0, 0):
+
+            self.vel = vector.normalize(self.vel)
+
+        self.pos += self.vel * 10
 
         self.rect.center = self.pos
 
 class Boss(pygame.sprite.Sprite):
 
-    def __init__(self, x, y):
+    def __init__(self, game, x, y):
 
         self.groups = game.allSprites, game.enemies, game.Boss
 
@@ -435,6 +679,46 @@ class Boss(pygame.sprite.Sprite):
     def update(self):
 
         pass
+
+class EnemyProjectile(pygame.sprite.Sprite):
+
+    def __init__(self, game, enemy, direction):
+
+        self.groups = game.allSprites, game.enemies
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.rangedEnemy = enemy
+
+        self.direction = direction
+
+        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/0.png'
+
+        self.image = pygame.image.load(self.originalImage).convert()
+
+        self.rect = self.image.get_rect()
+
+        self.pos = copy.copy(self.rangedEnemy.pos)
+
+        self.rect.center = self.pos
+        
+        self.damage = 50
+
+    def update(self):
+
+        if pygame.sprite.spritecollideany(self, self.game.obstacles):
+
+            self.kill()
+
+        if pygame.sprite.spritecollide(self, self.game.friendlies, False):
+
+            self.kill()
+
+        self.pos += self.direction * 10
+
+        self.rect.center = self.pos
 
 class Obstacle(pygame.sprite.Sprite):
 
@@ -472,6 +756,8 @@ class Hole(Obstacle):
 
         self.rect.topleft = self.pos
 
+        self.damage = 100
+
 # Replace with sword eventually
 class Spear(pygame.sprite.Sprite):
 
@@ -487,7 +773,7 @@ class Spear(pygame.sprite.Sprite):
 
         self.direction = player.orientation
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/spear.png'
+        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spear.png'
 
         self.image = pygame.image.load(self.originalImage).convert()
 
@@ -500,6 +786,8 @@ class Spear(pygame.sprite.Sprite):
         self.spawnTime = pygame.time.get_ticks()
 
         self.damage = 50
+
+        self.knockback = 10
 
     def update(self):
 
@@ -531,9 +819,135 @@ class Spear(pygame.sprite.Sprite):
 
         self.rect.topleft = self.player.pos + offset
 
-        if (pygame.time.get_ticks() - self.spawnTime > 100):
+        if (pygame.time.get_ticks() - self.spawnTime > 150):
 
-            # attacks go through walls, maybe kill on obstacle collide?
+            self.kill()
+
+class Arrow(pygame.sprite.Sprite):
+
+    def __init__(self, game, player):
+
+        self.groups = game.allSprites, game.weapons
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.player = player
+
+        self.direction = self.player.orientation
+
+        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/0.png'
+
+        self.image = pygame.image.load(self.originalImage).convert()
+
+        self.rect = self.image.get_rect()
+
+        if self.direction == 'Down':
+
+            self.vel = vector(0, 10)
+
+        elif self.direction == 'Up':
+
+            self.vel = vector(0, -10)
+
+        elif self.direction == 'Left':
+
+            self.vel = vector(-10, 0)
+
+        elif self.direction == 'Right':
+
+            self.vel = vector(10, 0)
+
+        self.pos = copy.copy(self.player.pos)
+
+        self.rect.center = self.pos
+        
+        self.damage = 30
+
+    def update(self):
+
+        if pygame.sprite.spritecollideany(self, self.game.obstacles):
+
+            self.kill()
+
+        self.pos += self.vel
+
+        self.rect.center = self.pos
+
+class Magic(pygame.sprite.Sprite):
+
+    def __init__(self, game, player):
+
+        self.groups = game.allSprites, game.weapons
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.player = player
+
+        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spikes.png'
+
+        self.image = pygame.image.load(self.originalImage).convert()
+
+        self.rect = self.image.get_rect()
+
+        self.vel = vector(0, 0)
+
+        self.pos = copy.copy(self.player.pos)
+
+        self.rect.center = self.pos
+
+        self.spawnTime = pygame.time.get_ticks()
+        
+        self.damage = 15
+
+    def update(self):
+
+        if pygame.sprite.spritecollideany(self, self.game.obstacles) or (
+            pygame.time.get_ticks() - self.spawnTime >= 3000
+        ):
+
+            self.kill()
+
+        self.mouseDir = vector.normalize(pygame.mouse.get_pos() - self.pos)
+
+        self.vel = self.mouseDir * 10
+
+        self.pos += self.vel
+
+        self.rect.center = self.pos
+
+class Spikes(pygame.sprite.Sprite):
+
+    def __init__(self, game, player):
+
+        self.groups = game.allSprites, game.weapons
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.game = game
+
+        self.player = player
+
+        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spikes.png'
+
+        self.image = pygame.image.load(self.originalImage).convert()
+
+        self.rect = self.image.get_rect()
+
+        self.pos = self.player.pos
+
+        self.rect.center = self.pos
+
+        self.spawnTime = pygame.time.get_ticks()
+        
+        self.damage = 10
+
+    def update(self):
+
+        if pygame.time.get_ticks() - self.spawnTime > 1000:
 
             self.kill()
 
@@ -561,8 +975,6 @@ class Sword(pygame.sprite.Sprite):
 
         self.rect.topleft = self.pos
 
-        self.vel = vector(0, 0)
-
         self.spawnTime = pygame.time.get_ticks()
 
         self.damage = 30
@@ -571,69 +983,35 @@ class Sword(pygame.sprite.Sprite):
 
         frameTime = self.game.clock.get_time() // 10
 
-        if (pygame.time.get_ticks() - self.spawnTime) > 100:
+        if (pygame.time.get_ticks() - self.spawnTime) > 150:
 
             self.kill()
 
-        elif (pygame.time.get_ticks() - self.spawnTime) < 50:
+        if self.direction == 'Down':
 
-            newHeight = tiles + frameTime
+            offset = vector(0, 30)
 
-            self.image = pygame.transform.scale(self.image, (10, newHeight))
+            self.image = pygame.transform.rotate(self.image, 240)
 
-            if self.direction == 'Down':
+        elif self.direction == 'Up':
 
-                offset = vector(0, 30)
+            offset = vector(-10, -30)
 
-                self.image = pygame.transform.scale(pygame.transform.rotate(self.image, 180), (10, newHeight))
+            self.image = pygame.transform.rotate(self.image, 60)
 
-            elif self.direction == 'Up':
+        elif self.direction == 'Right':
 
-                offset = vector(-10, -30)
+            offset = vector(20, -10)
 
-            elif self.direction == 'Right':
+            self.image = pygame.transform.rotate(self.image, 330)
 
-                offset = vector(0, 0)
+        elif self.direction == 'Left':
 
-                self.image = pygame.transform.scale(pygame.transform.rotate(self.image, 90), (10, newHeight))
+            offset = vector(-50, 0)
 
-            elif self.direction == 'Left':
+            self.image = pygame.transform.rotate(self.image, 150)
 
-                offset = vector(-50, 0)
-
-                self.image = pygame.transform.scale(pygame.transform.rotate(self.image, -90), (10, newHeight))
-
-            self.rect.topleft = self.player.pos + offset
-
-        elif 50 < (pygame.time.get_ticks() - self.spawnTime) < 100:
-
-            self.image = pygame.transform.scale(self.image, (10, tiles - frameTime))
-
-            if self.direction == 'Down':
-
-                offset = vector(0, 30)
-
-                self.image = pygame.transform.rotate(self.image, 180)
-
-            elif self.direction == 'Up':
-
-                offset = vector(-10, -30)
-
-            elif self.direction == 'Right':
-
-                offset = vector(30, 15)
-
-                self.image = pygame.transform.rotate(self.image, 90)
-
-            elif self.direction == 'Left':
-
-                offset = vector(-50, 0)
-
-                self.image = pygame.transform.rotate(self.image, -90)
-
-            self.rect.topleft = self.player.pos + offset
-
-        
+        self.rect.topleft = self.player.pos + offset
 
 # Run the game
 
