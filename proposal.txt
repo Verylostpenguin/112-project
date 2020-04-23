@@ -45,3 +45,8 @@ Version Control Plan:
     Image Link: https://gyazo.com/3b11e6095a8324af16c6969cc2eeea31
 
 Module List: Pygame
+
+TP2 Update:
+
+    We no longer have an enemy AI based off of the basic enemy AI, ranged enemies will now stay stationary, but attempt to move within sight if they cannot target player.
+    Boss AI now has multiple stages where it uses both AI's and has a dash attack and machine gun attack. There are no more significant changes that have taken place.
