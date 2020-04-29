@@ -36,7 +36,9 @@ GREY = (105, 105, 105)
 
 BROWN = (139, 69, 19)
 
-GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+MAROON = (139, 0, 0)
 
 highscores = [0, 0, 0, 0, 0]
 
@@ -956,51 +958,51 @@ class Game:
 
         help1Font = pygame.font.Font(None, 40)
 
-        help1Text = help1Font.render('Objective: Get to the next room through the door by any means possible!', True, GREEN)
+        help1Text = help1Font.render('Objective: Get to the next room through the door by any means possible!', True, MAROON)
 
         help2Font = pygame.font.Font(None, 40)
 
-        help2Text = help2Font.render('Controls:', True, GREEN)
+        help2Text = help2Font.render('Controls:', True, MAROON)
 
         help3Font = pygame.font.Font(None, 40)
 
-        help3Text = help3Font.render('WASD to move up, left, down, and right', True, GREEN)
+        help3Text = help3Font.render('WASD to move up, left, down, and right', True, MAROON)
 
         help4Font = pygame.font.Font(None, 40)
 
-        help4Text = help4Font.render('Left Click: Use Sword (No cooldown)', True, GREEN)
+        help4Text = help4Font.render('Left Click: Use Sword (No cooldown)', True, MAROON)
 
         help5Font = pygame.font.Font(None, 40)
 
-        help5Text = help5Font.render('Right Click: Use special weapon (3 second cooldown)', True, GREEN)
+        help5Text = help5Font.render('Right Click: Use special weapon (3 second cooldown)', True, MAROON)
 
         help6Font = pygame.font.Font(None, 40)
 
-        help6Text = help6Font.render('Space Bar: Drop spikes', True, GREEN)
+        help6Text = help6Font.render('Space Bar: Drop spikes', True, MAROON)
 
         help7Font = pygame.font.Font(None, 40)
 
-        help7Text = help7Font.render('E: Bring up inventory and switch special weapons you can ', True, GREEN)
+        help7Text = help7Font.render('E: Bring up inventory and switch special weapons you can ', True, MAROON)
 
         help8Font = pygame.font.Font(None, 40)
 
-        help8Text = help8Font.render('select using your mouse', True, GREEN)
+        help8Text = help8Font.render('select using your mouse', True, MAROON)
 
         help9Font = pygame.font.Font(None, 40)
 
-        help9Text = help9Font.render('Use your sword on doors and switches to activate them!', True, GREEN)
+        help9Text = help9Font.render('Use your sword on doors and switches to activate them!', True, RED)
 
         help10Font = pygame.font.Font(None, 40)
 
-        help10Text = help9Font.render('Avoid getting hit by holes, enemies, and projectiles', True, GREEN)
+        help10Text = help9Font.render('Avoid getting hit by holes, enemies, and projectiles', True, RED)
         
         help11Font = pygame.font.Font(None, 40)
         
-        help11Text = help10Font.render('Use Escape now to go back to the main menu', True, GREEN)
+        help11Text = help10Font.render('Use Escape now to go back to the main menu', True, RED)
 
         help12Font = pygame.font.Font(None, 40)
 
-        help12Text = help11Font.render('You can also use escape to go to the main menu during the game', True, GREEN)
+        help12Text = help11Font.render('You can also use escape to go to the main menu during the game', True, RED)
 
         self.display.blit(help1Text, (10, 25))
 
@@ -1028,7 +1030,7 @@ class Game:
 
         holeFont = pygame.font.Font(None, 30)
 
-        holeText = holeFont.render('Hole Example: ', True, GREEN)
+        holeText = holeFont.render('Hole Example: ', True, RED)
 
         self.display.blit(holeText, (750, 560))
 
@@ -1874,8 +1876,6 @@ class Door(pygame.sprite.Sprite):
 
                 self.remove(self.game.obstacles)
 
-                pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/4.png')
-
             elif self.purpose == 'removeBlocker':
 
                 self.game.blocker.empty()
@@ -1885,6 +1885,8 @@ class Door(pygame.sprite.Sprite):
                 self.game.currentRoom += 1
 
                 self.game.changeRoom()
+
+                self.game.score += 500
 
                 self.game.levelUp = True
 
