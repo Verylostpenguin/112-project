@@ -8,16 +8,19 @@ from collections import deque
 
 from pygame.locals import *
 
-# Images found at this site
+from pygame.math import Vector2 as vector
+
+# Game images found at this site
 # https://opengameart.org/content/zelda-like-tilesets-and-sprites
 # https://opengameart.org/content/dungeon-tileset
 # https://opengameart.org/content/rotating-arrow-projectile
 # https://opengameart.org/content/light-weapons-pixel-art
 # https://opengameart.org/content/whirlwind
 
-# Temp globals
+# Title Screen Image found at
+# https://dlpng.com/png/1729391
 
-vector = pygame.math.Vector2
+# Globals
 
 displayWidth = 1024
 
@@ -33,11 +36,13 @@ GREY = (105, 105, 105)
 
 BROWN = (139, 69, 19)
 
+GREEN = (0, 255, 0)
+
 highscores = [0, 0, 0, 0, 0]
 
-def getPlayerImageOrientation(orientation):
+folder = os.getcwd()
 
-    folder = os.getcwd()
+def getPlayerImageOrientation(orientation):
 
     walkImage = os.path.join(folder, f'images/walk{orientation}/0.png')
 
@@ -49,23 +54,21 @@ def getPlayerImageOrientation(orientation):
 
 def getObstacleImage(obstacleType):
 
-    folder = os.getcwd()
-
     images = os.path.join(folder, 'images/obstacles')
 
-    return pygame.image.load(os.path.join(images, f'{obstacleType}.png')).convert_alpha()
+    image = pygame.image.load(os.path.join(images, f'{obstacleType}.png'))
+
+    image.set_colorkey(WHITE)
+
+    return image.convert_alpha()
 
 def getBackgroundImage(backgroundType):
-
-    folder = os.getcwd()
 
     images = os.path.join(folder, 'images/background')
 
     return pygame.image.load(os.path.join(images, f'{backgroundType}.png')).convert_alpha()
 
 def getEnemyImage(enemyType):
-
-    folder = os.getcwd()
 
     images = os.path.join(folder, 'images/enemy')
 
@@ -77,9 +80,7 @@ def getEnemyImage(enemyType):
 
 def getSwingOrientation(orientation):
 
-    folder = os.getcwd()
-
-    swingImage = os.path.join(folder, f'images/sword{orientation}/2.png')
+    swingImage = os.path.join(folder, f'images/sword{orientation}/1.png')
 
     image = pygame.image.load(swingImage)
 
@@ -88,8 +89,6 @@ def getSwingOrientation(orientation):
     return image.convert_alpha()
 
 def getWeaponImage(type):
-
-    folder = os.getcwd()
 
     weapons = os.path.join(folder, 'images/weapon')
 
@@ -134,9 +133,13 @@ class Game:
 
         self.display = pygame.display.set_mode([displayWidth, displayHeight])
 
+        self.titleImage = pygame.image.load(os.path.join(folder, 'images/background.png')).convert()
+
         self.menu = True
 
         self.helpScreen = False
+
+        self.levelUp = False
 
         self.started = False
 
@@ -147,6 +150,10 @@ class Game:
         self.clock = pygame.time.Clock()
 
         self.currentRoom = 1
+
+        self.score = 0
+
+        self.deaths = 0
 
     ######################
     # GAME INITIALIZATION
@@ -159,8 +166,6 @@ class Game:
         sys.exit()
 
     def initializeGame(self):
-
-        self.score = 0
 
         self.lastWeaponSpawn = pygame.time.get_ticks()
 
@@ -208,11 +213,9 @@ class Game:
 
         self.floorImage = getBackgroundImage('caveTile')
 
+        self.switchImage = getObstacleImage('switch')
+
     def changeRoom(self):
-
-        if self.currentRoom == 1:
-
-            self.score = 0
 
         folder = os.getcwd()
 
@@ -290,7 +293,7 @@ class Game:
 
                 elif tile == '/':
 
-                    Door(self, col, row, self.doorImage, 'removeBlocker')
+                    Door(self, col, row, self.switchImage, 'removeBlocker')
 
                 elif tile == '*':
 
@@ -345,7 +348,7 @@ class Game:
 
                         self.menu = not self.menu
 
-                    elif self.helpScreen:
+                    if self.helpScreen:
 
                         self.menu = True
 
@@ -353,13 +356,9 @@ class Game:
 
                 elif event.key == K_e:
 
-                    self.openInventory = not self.openInventory
+                    if not (self.menu or self.helpScreen):
 
-                elif event.key == K_m:
-
-                    self.currentRoom = 4
-
-                    self.changeRoom()
+                        self.openInventory = not self.openInventory
 
                 elif event.key == K_SPACE:
 
@@ -368,6 +367,26 @@ class Game:
                         self.player.spikeCount -= 1
 
                         Spikes(self, self.player)
+
+                ######################
+                # SHORTCUT KEYS
+                ######################
+                
+                elif event.key == K_m:
+
+                    if self.currentRoom < 4:
+
+                        self.currentRoom += 1
+
+                        self.changeRoom()
+
+                elif event.key == K_EQUALS:
+
+                    self.score += 1000
+
+                elif event.key == K_g:
+
+                    self.player.god = not self.player.god
 
             elif event.type == MOUSEBUTTONDOWN:
 
@@ -381,7 +400,7 @@ class Game:
 
         # Add self.adjustmentPath
 
-        self.path = self.mergeDictionaries(self.breadthFirstSearch(self.player.pos // tiles),self.adjustmentPath)
+        self.path = self.mergeDictionaries(self.breadthFirstSearch(self.player.pos // tiles), self.adjustmentPath)
 
     def handleMouse(self, button):
 
@@ -402,6 +421,10 @@ class Game:
                     self.gameOver = False
 
                     self.win = False
+
+                    self.deaths = 0
+
+                    self.score = 0
 
                     self.currentRoom = 1
 
@@ -453,6 +476,26 @@ class Game:
 
                     self.currentWeapon = 'Magic'
 
+            elif self.levelUp:
+
+                if self.highlight == 'Health':
+
+                    self.player.health += 50
+
+                elif self.highlight == 'Damage':
+
+                    self.player.damage += 50
+
+                elif self.highlight == 'Projectile':
+
+                    self.player.arrowCount += 10
+
+                    self.player.mana += 100
+
+                    self.player.spikeCount += 5
+
+                self.levelUp = False
+
             self.player.swing = True
 
             Sword(self, self.player)
@@ -468,8 +511,6 @@ class Game:
                     Spear(self, self.player)
 
                 elif self.currentWeapon == 'Bow':
-
-                    self.player.bow()
 
                     if self.player.arrowCount > 0:
 
@@ -501,6 +542,12 @@ class Game:
 
         self.resumeButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 - 100, 300, 100)
 
+        self.healthBox = pygame.Rect(displayWidth // 2 - 300, 210, 600, 100)
+
+        self.damageBox = pygame.Rect(displayWidth // 2 - 300, 410, 600, 100)
+
+        self.replenishBox = pygame.Rect(displayWidth // 2 - 300, 610, 600, 100)
+
         if self.gameOver or self.win:
 
             if self.retryButton.collidepoint(self.mousePos):
@@ -520,8 +567,6 @@ class Game:
                 self.highlight = None
         
         elif self.menu:
-
-            pygame.mouse.set_visible(True)
 
             if self.started:
                 
@@ -563,8 +608,6 @@ class Game:
 
             self.magicBox = pygame.Rect(0, 200, 300, 100)
 
-            pygame.mouse.set_visible(True)
-
             if self.spearBox.collidepoint(self.mousePos):
 
                 self.highlight = 'Spear'
@@ -581,7 +624,25 @@ class Game:
 
                 self.highlight = None
 
-        else:
+        elif self.levelUp:
+
+            if self.healthBox.collidepoint(self.mousePos):
+
+                self.highlight = 'Health'
+
+            elif self.damageBox.collidepoint(self.mousePos):
+
+                self.highlight = 'Damage'
+
+            elif self.replenishBox.collidepoint(self.mousePos):
+
+                self.highlight = 'Projectile'
+
+            else:
+
+                self.highlight = None
+
+        elif not self.helpScreen:
 
             self.allSprites.update()
 
@@ -593,18 +654,13 @@ class Game:
 
                 enemy.health -= weapon[0].damage
 
+                enemy.knockback = weapon[0].knockback
+
             hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
 
             for hit in hits:
 
                 self.player.health -= hit.damage
-
-
-    def draw_grid(self):
-        for x in range(0, displayWidth, tiles):
-            pygame.draw.line(self.display, BLACK, (x, 0), (x, displayHeight))
-        for y in range(0, displayHeight, tiles):
-            pygame.draw.line(self.display, BLACK, (0, y), (displayWidth, y))
 
     ##################
     # DRAW FUNCTIONS
@@ -620,19 +676,19 @@ class Game:
 
         elif self.win:
 
-            self.display.fill(WHITE)
+            self.display.blit(self.titleImage, (0, 0))
 
             self.drawGameWin()
         
         elif self.menu:
 
-            self.display.fill(GREY)
+            self.display.blit(self.titleImage, (0, 0))
 
             self.drawMenu()
 
         elif self.helpScreen:
 
-            self.display.fill(WHITE)
+            self.display.blit(self.titleImage, (0, 0))
 
             self.drawHelp()
 
@@ -642,19 +698,35 @@ class Game:
 
             self.drawInventory()
 
+        elif self.levelUp:
+
+            self.display.fill(BLACK)
+
+            self.drawLevelUp()
+
         else:
 
             self.display.blit(self.background, (0, 0))
 
-            self.draw_grid()
+            self.drawGrid()
 
             self.allSprites.draw(self.display)
 
         pygame.display.flip()
 
+    def drawGrid(self):
+
+        for x in range(0, displayWidth, tiles):
+
+            pygame.draw.line(self.display, (100, 100, 100), (x, 0), (x, displayHeight))
+
+        for y in range(0, displayHeight, tiles):
+
+            pygame.draw.line(self.display, (100, 100, 100), (0, y), (displayWidth, y))
+
     def drawInventory(self):
 
-        playerStatBox = pygame.Rect(700, 0, 324, 400)
+        playerInventoryBox = pygame.Rect(700, 0, 324, 400)
 
         healthText = pygame.font.Font(None, 40)
 
@@ -672,7 +744,31 @@ class Game:
 
         spikes = spikeText.render(f'Spikes: {self.player.spikeCount}', True, WHITE)        
 
-        pygame.draw.rect(self.display, WHITE, playerStatBox, 2)
+        pygame.draw.rect(self.display, WHITE, playerInventoryBox, 2)
+
+        deathFont = pygame.font.Font(None, 40)
+
+        deathText = deathFont.render(f'Deaths: {self.deaths}', True, WHITE)
+
+        scoreFont = pygame.font.Font(None, 40)
+
+        scoreText = scoreFont.render(f'Score: {self.score}', True, WHITE)
+
+        levelFont = pygame.font.Font(None, 40)
+
+        levelText = levelFont.render(f'Level: {self.currentRoom}', True, WHITE)
+
+        weaponFont = pygame.font.Font(None, 40)
+
+        weaponText = weaponFont.render(f'Current Weapon: {self.currentWeapon}', True, WHITE)
+
+        self.display.blit(deathText, (displayWidth - 150, displayHeight - 50))
+
+        self.display.blit(scoreText, (10, displayHeight - 50))
+
+        self.display.blit(levelText, (450, 50))
+        
+        self.display.blit(weaponText, (350, 150))
 
         self.display.blit(health, (800, 50))
 
@@ -808,8 +904,6 @@ class Game:
 
             pygame.draw.rect(self.display, BLACK, self.restartButton, 5)
 
-            pygame.draw.rect(self.display, BLACK, self.helpButton, 5)
-
             self.display.blit(resumeSurface, (displayWidth // 2 - 147, displayHeight // 2 - 97))
 
             self.display.blit(resumeText, (displayWidth // 2 - 133, displayHeight // 2 - 85))
@@ -830,8 +924,6 @@ class Game:
 
             pygame.draw.rect(self.display, BLACK, self.startButton, 5)
 
-            pygame.draw.rect(self.display, BLACK, self.helpButton, 5)
-
             self.display.blit(startSurface, (displayWidth // 2 - 147, displayHeight // 2 - 47))
 
             self.display.blit(startText, (displayWidth // 2 - 85, displayHeight // 2 - 30))
@@ -839,6 +931,8 @@ class Game:
             self.display.blit(helpSurface, (displayWidth // 2 - 147, displayHeight // 2 + 152))
 
             self.display.blit(helpText, (displayWidth // 2 - 125, displayHeight // 2 + 190))
+
+        pygame.draw.rect(self.display, BLACK, self.helpButton, 5)
 
         self.display.blit(titleSurface, (displayWidth // 2 - 435, displayHeight // 2 - 315))
 
@@ -854,47 +948,51 @@ class Game:
 
         help1Font = pygame.font.Font(None, 40)
 
-        help1Text = help1Font.render('Objective: Get to the next room through the door by any means possible!', True, BLACK)
+        help1Text = help1Font.render('Objective: Get to the next room through the door by any means possible!', True, GREEN)
 
         help2Font = pygame.font.Font(None, 40)
 
-        help2Text = help2Font.render('Controls:', True, BLACK)
+        help2Text = help2Font.render('Controls:', True, GREEN)
 
         help3Font = pygame.font.Font(None, 40)
 
-        help3Text = help3Font.render('WASD to move up, left, down, and right', True, BLACK)
+        help3Text = help3Font.render('WASD to move up, left, down, and right', True, GREEN)
 
         help4Font = pygame.font.Font(None, 40)
 
-        help4Text = help4Font.render('Left Click: Use Sword (No cooldown)', True, BLACK)
+        help4Text = help4Font.render('Left Click: Use Sword (No cooldown)', True, GREEN)
 
         help5Font = pygame.font.Font(None, 40)
 
-        help5Text = help5Font.render('Right Click: Use special weapon (3 second cooldown)', True, BLACK)
+        help5Text = help5Font.render('Right Click: Use special weapon (3 second cooldown)', True, GREEN)
 
         help6Font = pygame.font.Font(None, 40)
 
-        help6Text = help6Font.render('Space Bar: Drop spikes', True, BLACK)
+        help6Text = help6Font.render('Space Bar: Drop spikes', True, GREEN)
 
         help7Font = pygame.font.Font(None, 40)
 
-        help7Text = help7Font.render('E: Bring up inventory and switch special weapons you can ', True, BLACK)
+        help7Text = help7Font.render('E: Bring up inventory and switch special weapons you can ', True, GREEN)
 
         help8Font = pygame.font.Font(None, 40)
 
-        help8Text = help8Font.render('select using your mouse', True, BLACK)
+        help8Text = help8Font.render('select using your mouse', True, GREEN)
 
         help9Font = pygame.font.Font(None, 40)
 
-        help9Text = help9Font.render('Use your sword on doors and switches to activate them!', True, BLACK)
-        
+        help9Text = help9Font.render('Use your sword on doors and switches to activate them!', True, GREEN)
+
         help10Font = pygame.font.Font(None, 40)
+
+        help10Text = help9Font.render('Avoid getting hit by holes, enemies, and projectiles', True, GREEN)
         
-        help10Text = help10Font.render('Use Escape now to go back to the main menu', True, BLACK)
-
         help11Font = pygame.font.Font(None, 40)
+        
+        help11Text = help10Font.render('Use Escape now to go back to the main menu', True, GREEN)
 
-        help11Text = help11Font.render('You can also use escape to go to the main menu during the game', True, BLACK)
+        help12Font = pygame.font.Font(None, 40)
+
+        help12Text = help11Font.render('You can also use escape to go to the main menu during the game', True, GREEN)
 
         self.display.blit(help1Text, (10, 25))
 
@@ -917,6 +1015,16 @@ class Game:
         self.display.blit(help10Text, (10, 550))
 
         self.display.blit(help11Text, (10, 600))
+
+        self.display.blit(help12Text, (10, 650))
+
+        holeFont = pygame.font.Font(None, 30)
+
+        holeText = holeFont.render('Hole Example: ', True, GREEN)
+
+        self.display.blit(holeText, (750, 560))
+
+        self.display.blit(self.holeImage, (900 ,550))
 
     def drawGameOver(self):
         
@@ -1076,6 +1184,68 @@ class Game:
 
         pygame.draw.rect(self.display, BLACK, self.quitButton, 5)
 
+    def drawLevelUp(self):
+
+        levelUpFont = pygame.font.Font(None, 80)
+
+        levelUpText = levelUpFont.render('You Leveled Up!', True, WHITE)
+
+        self.display.blit(levelUpText, (displayWidth // 2 - 220, 75))
+
+        healthSurface = pygame.Surface((595, 95))
+
+        damageSurface = pygame.Surface((595, 95))
+
+        replenishSurface = pygame.Surface((595, 95))
+
+        healthSurface.fill(BLACK)
+
+        damageSurface.fill(BLACK)
+
+        replenishSurface.fill(BLACK)
+
+        if self.highlight == 'Health':
+
+            healthSurface.fill(GREY)
+
+        elif self.highlight == 'Damage':
+
+            damageSurface.fill(GREY)
+
+        elif self.highlight == 'Projectile':
+
+            replenishSurface.fill(GREY)
+
+        healthFont = pygame.font.Font(None, 40)
+
+        healthText = healthFont.render('Health', True, WHITE)
+
+        pygame.draw.rect(self.display, WHITE, self.healthBox)
+
+        self.display.blit(healthSurface, (displayWidth // 2 - 298, 213))
+
+        self.display.blit(healthText, (displayWidth // 2 - 50, 250))
+
+        damageFont = pygame.font.Font(None, 40)
+
+        damageText = damageFont.render('Damage', True, WHITE)
+
+        pygame.draw.rect(self.display, WHITE, self.damageBox)
+
+        self.display.blit(damageSurface, (displayWidth // 2 - 297, 413))
+
+        self.display.blit(damageText, (displayWidth // 2 - 50, 450))
+
+        replenishFont = pygame.font.Font(None, 40)
+
+        replenishText = replenishFont.render('Replenish Projectiles', True, WHITE)
+
+        pygame.draw.rect(self.display, WHITE, self.replenishBox)
+
+        self.display.blit(replenishSurface, (displayWidth // 2 - 297, 613))
+
+        self.display.blit(replenishText, (displayWidth // 2 - 150, 650))       
+
     ########################
     # PATHFINDING ALGORITHM
     ########################
@@ -1172,6 +1342,8 @@ class Player(pygame.sprite.Sprite):
 
         self.game = game
 
+        self.god = False
+
         self.orientation = 'Down'
 
         self.image = getPlayerImageOrientation(self.orientation)
@@ -1187,6 +1359,8 @@ class Player(pygame.sprite.Sprite):
         self.swing = False
 
         self.health = 100
+
+        self.damage = 0
 
         self.arrowCount = 10
 
@@ -1265,19 +1439,19 @@ class Player(pygame.sprite.Sprite):
 
                 sprite.rect.y = int(sprite.pos.y)
 
-    def bow(self):
-
-        pass
-
     def swing(self):
 
         self.swing = True
 
     def update(self):
 
-        if self.health <= 0:
+        if self.health <= 0 and not self.god:
 
             self.kill()
+
+            self.game.deaths += 1
+
+            self.game.score -= 500
 
             self.game.gameOver = True
 
@@ -1329,7 +1503,11 @@ class BasicEnemy(pygame.sprite.Sprite):
 
         self.damage = 25
 
+        self.knockback = 0
+
     def update(self):
+
+        self.attackDir = vector.normalize(self.game.player.pos - self.pos)
 
         if self.health <= 0:
 
@@ -1351,7 +1529,15 @@ class BasicEnemy(pygame.sprite.Sprite):
 
             self.vel = vector.normalize(self.vel)
 
-        self.pos += self.vel * 3
+        if self.knockback > 0:
+
+            self.pos += -self.attackDir * self.knockback
+
+            self.knockback = 0
+
+        else:
+
+            self.pos += self.vel * 3
 
         self.rect.center = self.pos
 
@@ -1377,6 +1563,8 @@ class RangedEnemy(pygame.sprite.Sprite):
 
         self.health = 250
 
+        self.knockback = 0
+
         self.damage = 20
 
         self.lastAttack = pygame.time.get_ticks()
@@ -1386,8 +1574,6 @@ class RangedEnemy(pygame.sprite.Sprite):
     def attack(self):
 
         self.lastAttack = pygame.time.get_ticks()
-
-        self.attackDir = vector.normalize(self.game.player.pos - self.pos)
 
         EnemyProjectile(self.game, self, self.attackDir)
 
@@ -1404,6 +1590,8 @@ class RangedEnemy(pygame.sprite.Sprite):
         return True
 
     def update(self):
+
+        self.attackDir = vector.normalize(self.game.player.pos - self.pos)
 
         if self.health <= 0:
 
@@ -1441,7 +1629,15 @@ class RangedEnemy(pygame.sprite.Sprite):
 
             self.vel = vector.normalize(self.vel)
 
-        self.pos += self.vel * 3
+        if self.knockback > 0:
+
+            self.pos += -self.attackDir * self.knockback
+
+            self.knockback = 0
+
+        else:
+
+            self.pos += self.vel * 3
 
         self.rect.center = self.pos
 
@@ -1469,7 +1665,7 @@ class Boss(RangedEnemy):
 
         self.vel = vector(0, 0)
 
-        self.health = 1
+        self.health = 1000
 
         self.damage = 25
 
@@ -1496,6 +1692,10 @@ class Boss(RangedEnemy):
             self.game.score += 1000
 
             highscores.append(self.game.score)
+
+            highscores.sort(reverse = True)
+
+            self.game.score = 0
 
             self.game.win = True
 
@@ -1590,6 +1790,8 @@ class EnemyProjectile(pygame.sprite.Sprite):
         
         self.damage = 50
 
+        self.knockback = 0
+
     def update(self):
 
         if pygame.sprite.spritecollideany(self, self.game.obstacles):
@@ -1673,6 +1875,8 @@ class Door(pygame.sprite.Sprite):
                 self.game.currentRoom += 1
 
                 self.game.changeRoom()
+
+                self.game.levelUp = True
 
         else:
 
@@ -1871,6 +2075,8 @@ class Arrow(pygame.sprite.Sprite):
         
         self.damage = 30
 
+        self.knocback = 2
+
     def update(self):
 
         if pygame.sprite.spritecollideany(self, self.game.obstacles):
@@ -1910,6 +2116,8 @@ class Magic(pygame.sprite.Sprite):
         self.spawnTime = pygame.time.get_ticks()
         
         self.damage = 15
+
+        self.knockback = 0
 
     def update(self):
 
@@ -1960,6 +2168,8 @@ class Spikes(pygame.sprite.Sprite):
         
         self.damage = 10
 
+        self.knockback = 0.1
+
     def update(self):
 
         if pygame.time.get_ticks() - self.spawnTime > 1000:
@@ -1993,6 +2203,8 @@ class Sword(pygame.sprite.Sprite):
         self.spawnTime = pygame.time.get_ticks()
 
         self.damage = 30
+
+        self.knockback = 5
 
     def update(self):
 
