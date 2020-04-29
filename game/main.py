@@ -1,4 +1,8 @@
-import pygame, random, math, sys, os, pathlib, copy
+import pygame
+
+import math, copy
+
+import os, sys
 
 from collections import deque
 
@@ -6,8 +10,10 @@ from pygame.locals import *
 
 # Images found at this site
 # https://opengameart.org/content/zelda-like-tilesets-and-sprites
+# https://opengameart.org/content/dungeon-tileset
 # https://opengameart.org/content/rotating-arrow-projectile
 # https://opengameart.org/content/light-weapons-pixel-art
+# https://opengameart.org/content/whirlwind
 
 # Temp globals
 
@@ -19,29 +25,103 @@ displayHeight = 768
 
 tiles = 32
 
-gridWidth = displayWidth // tiles
-
-gridHeight = displayHeight // tiles
-
 BLACK = (0, 0, 0)
 
 WHITE = (255, 255, 255)
 
-GREY = (211, 211, 211)
+GREY = (105, 105, 105)
 
-def getImageOrientation(orientation):
+BROWN = (139, 69, 19)
 
-    # Scale to 200%
+highscores = [0, 0, 0, 0, 0]
 
-    return pygame.image.load(f'c:/Users/willh/Desktop/112-project/images/walk{orientation}/0.png').convert()
+def getPlayerImageOrientation(orientation):
+
+    folder = os.getcwd()
+
+    walkImage = os.path.join(folder, f'images/walk{orientation}/0.png')
+
+    image = pygame.image.load(walkImage)
+
+    image.set_colorkey(WHITE)
+
+    return image.convert_alpha()
+
+def getObstacleImage(obstacleType):
+
+    folder = os.getcwd()
+
+    images = os.path.join(folder, 'images/obstacles')
+
+    return pygame.image.load(os.path.join(images, f'{obstacleType}.png')).convert_alpha()
+
+def getBackgroundImage(backgroundType):
+
+    folder = os.getcwd()
+
+    images = os.path.join(folder, 'images/background')
+
+    return pygame.image.load(os.path.join(images, f'{backgroundType}.png')).convert_alpha()
+
+def getEnemyImage(enemyType):
+
+    folder = os.getcwd()
+
+    images = os.path.join(folder, 'images/enemy')
+
+    image = pygame.image.load(os.path.join(images, f'{enemyType}.png'))
+
+    image.set_colorkey(WHITE)
+
+    return image.convert_alpha()
 
 def getSwingOrientation(orientation):
 
-    # Scale to 200%
+    folder = os.getcwd()
 
-    return pygame.image.load(f'c:/Users/willh/Desktop/112-project/images/sword{orientation}/2.png').convert()
+    swingImage = os.path.join(folder, f'images/sword{orientation}/2.png')
+
+    image = pygame.image.load(swingImage)
+
+    image.set_colorkey(WHITE)
+
+    return image.convert_alpha()
+
+def getWeaponImage(type):
+
+    folder = os.getcwd()
+
+    weapons = os.path.join(folder, 'images/weapon')
+
+    if type == 'Magic':
+
+        image = pygame.image.load(os.path.join(weapons, 'magic/0.png'))
+
+        image.set_colorkey(WHITE)
+
+    elif type == 'Arrow':
+
+        image = pygame.image.load(os.path.join(weapons, 'arrow/0.png'))
+
+        image.set_colorkey(BLACK)
+
+    elif type == 'Spear':
+
+        image = pygame.image.load(os.path.join(weapons, 'spear.png'))
+
+        image.set_colorkey(WHITE)
+
+    elif type == 'Spikes':
+
+        image = pygame.image.load(os.path.join(weapons, 'spikes.png'))
+
+        image.set_colorkey(WHITE)
+
+    return image.convert_alpha()
+
 
 # The basic framework of this code was heavily adapted from tutorial http://kidscancode.org/lessons/
+# The BFS algorithm was also from http://kidscancode.org/lessons/
 class Game:
 
     def __init__(self):
@@ -54,52 +134,33 @@ class Game:
 
         self.display = pygame.display.set_mode([displayWidth, displayHeight])
 
+        self.menu = True
+
+        self.helpScreen = False
+
+        self.started = False
+
+        self.gameOver = False
+
+        self.win = False
+
         self.clock = pygame.time.Clock()
 
         self.currentRoom = 1
 
-        self.loadRoom()
+    ######################
+    # GAME INITIALIZATION
+    ######################
 
-    def loadRoom(self):
+    def quitGame(self):
 
-        folder = os.path.dirname(__file__)
+        pygame.quit()
 
-        self.room = []
-
-        with open('c:/Users/willh/Desktop/112-project/rooms/room1.txt', 'rt') as f:
-
-            for line in f:
-
-                self.room.append(line)
-
-    def changeRoom(self):
-
-        folder = os.getcwd()
-
-        rooms = os.path.join(folder, 'rooms')
-
-        for fileName in os.scandir(rooms):
-
-            if fileName.path.endswith(f"{self.currentRoom}.txt"):
-
-                self.room = []
-
-                roomName = os.path.join(rooms, fileName)
-
-                with open(roomName, 'rt') as f:
-
-                    for line in f:
-
-                        self.room.append(line)
-
-        self.drawRoom()
-
-
-    def loadSprites(self):
-
-        pass
+        sys.exit()
 
     def initializeGame(self):
+
+        self.score = 0
 
         self.lastWeaponSpawn = pygame.time.get_ticks()
 
@@ -129,6 +190,48 @@ class Game:
 
         self.weapons = pygame.sprite.Group()
 
+        self.loadSprites()
+
+        self.changeRoom()
+
+    def loadSprites(self):
+
+        self.wallImage = getObstacleImage('wallTile')
+
+        self.holeImage = getObstacleImage('holeTile')
+
+        self.obstacleImage = getObstacleImage('obstacleTile')
+
+        self.doorImage = getObstacleImage('doorTile')
+
+        self.grassImage = getBackgroundImage('grassTile')
+
+        self.floorImage = getBackgroundImage('caveTile')
+
+    def changeRoom(self):
+
+        if self.currentRoom == 1:
+
+            self.score = 0
+
+        folder = os.getcwd()
+
+        rooms = os.path.join(folder, 'rooms')
+
+        for fileName in os.scandir(rooms):
+
+            if fileName.path.endswith(f"{self.currentRoom}.txt"):
+
+                self.room = []
+
+                roomName = os.path.join(rooms, fileName)
+
+                with open(roomName, 'rt') as f:
+
+                    for line in f:
+
+                        self.room.append(line)
+
         self.drawRoom()
 
     def drawRoom(self):
@@ -137,10 +240,18 @@ class Game:
 
         self.walls = []
 
+        self.background = pygame.Surface((1024, 768))
+
+        for x in range(0, 1024, 32):
+
+            for y in range(0, 1024, 32):
+
+                self.background.blit(self.floorImage, (x, y))
+
         for row, tiles in enumerate(self.room):
 
             for col, tile in enumerate(tiles):
-
+                
                 if tile == '0':
 
                     self.player = Player(self, col, row)
@@ -149,7 +260,13 @@ class Game:
 
                     self.walls.append(vector(col, row))
 
-                    Obstacle(self, col, row)
+                    Obstacle(self, col, row, self.wallImage)
+
+                elif tile == 'O':
+
+                    self.walls.append(vector(col, row))
+
+                    Obstacle(self, col, row, self.obstacleImage)
 
                 elif tile == '2':
 
@@ -159,7 +276,7 @@ class Game:
 
                     self.walls.append(vector(col, row))
 
-                    Hole(self, col, row)
+                    Hole(self, col, row, self.holeImage)
 
                 elif tile == '4':
 
@@ -169,15 +286,15 @@ class Game:
 
                     self.walls.append(vector(col, row))
 
-                    Blocker(self, col, row)
+                    Blocker(self, col, row, self.obstacleImage)
 
                 elif tile == '/':
 
-                    Door(self, col, row, 'removeBlocker')
+                    Door(self, col, row, self.doorImage, 'removeBlocker')
 
                 elif tile == '*':
 
-                    Door(self, col, row, 'nextRoom')
+                    Door(self, col, row, self.doorImage, 'nextRoom')
 
                 elif tile == 'B':
 
@@ -208,11 +325,9 @@ class Game:
 
             self.clock.tick(60)
 
-    def quitGame(self):
-
-        pygame.quit()
-
-        sys.exit()
+    ####################
+    # EVENT FUNCTIONS
+    ####################
 
     def events(self):
     
@@ -226,7 +341,15 @@ class Game:
 
                 if event.key == K_ESCAPE:
 
-                    self.quitGame()
+                    if self.started:
+
+                        self.menu = not self.menu
+
+                    elif self.helpScreen:
+
+                        self.menu = True
+
+                        self.helpScreen = False
 
                 elif event.key == K_e:
 
@@ -238,65 +361,17 @@ class Game:
 
                     self.changeRoom()
 
-            elif event.type == MOUSEBUTTONDOWN:
-
-                time = pygame.time.get_ticks()
-
-                if event.button == 1:
-
-                    if self.openInventory:
-
-                        if self.highlight == 'Spear':
-
-                            self.currentWeapon = 'Spear'
-
-                        elif self.highlight == 'Bow':
-
-                            self.currentWeapon = 'Bow'
-
-                        elif self.highlight == 'Magic':
-
-                            self.currentWeapon = 'Magic'
-
-                    self.player.swing = True
-
-                    Sword(self, self.player)
-
-                elif event.button == 3:
-
-                    if time - self.lastWeaponSpawn >= self.cooldown:
-
-                        self.lastWeaponSpawn = time
-
-                        if self.currentWeapon == 'Spear':
-
-                            Spear(self, self.player)
-
-                        elif self.currentWeapon == 'Bow':
-
-                            self.player.bow()
-
-                            if self.player.arrowCount > 0:
-
-                                self.player.arrowCount -= 1
-
-                                Arrow(self, self.player)
-
-                        elif self.currentWeapon == 'Magic':
-
-                            if self.player.mana > 0:
-
-                                self.player.mana -= 10
-
-                                self.magic = Magic(self, self.player)
-
-                elif event.button == 2:
+                elif event.key == K_SPACE:
 
                     if self.player.spikeCount > 0:
 
                         self.player.spikeCount -= 1
 
                         Spikes(self, self.player)
+
+            elif event.type == MOUSEBUTTONDOWN:
+
+                self.handleMouse(event.button)
 
         self.mousePos = pygame.mouse.get_pos()
 
@@ -308,15 +383,185 @@ class Game:
 
         self.path = self.mergeDictionaries(self.breadthFirstSearch(self.player.pos // tiles),self.adjustmentPath)
 
+    def handleMouse(self, button):
+
+        time = pygame.time.get_ticks()
+
+        if button == 1:
+
+            if self.gameOver or self.win:
+
+                if self.highlight == 'Retry':
+
+                    self.gameOver = False
+
+                    self.running = False
+
+                elif self.highlight == 'Restart':
+
+                    self.gameOver = False
+
+                    self.win = False
+
+                    self.currentRoom = 1
+
+                    self.changeRoom()
+
+                elif self.highlight == 'Quit':
+
+                    self.quitGame()
+            
+            elif self.menu:
+
+                if self.highlight == 'Start' or (
+                    self.highlight == 'Resume'
+                ):
+
+                    self.menu = False
+
+                    self.started = True
+
+                elif self.highlight == 'Help':
+
+                    self.helpScreen = True
+
+                    self.menu = False
+
+                elif self.highlight == 'Restart':
+
+                    self.menu = False
+
+                    self.currentRoom = 1
+
+                    self.changeRoom()
+
+                elif self.highlight == 'Quit':
+
+                    self.quitGame()
+                    
+            elif self.openInventory:
+
+                if self.highlight == 'Spear':
+
+                    self.currentWeapon = 'Spear'
+
+                elif self.highlight == 'Bow':
+
+                    self.currentWeapon = 'Bow'
+
+                elif self.highlight == 'Magic':
+
+                    self.currentWeapon = 'Magic'
+
+            self.player.swing = True
+
+            Sword(self, self.player)
+
+        elif button == 3:
+
+            if time - self.lastWeaponSpawn >= self.cooldown:
+
+                self.lastWeaponSpawn = time
+
+                if self.currentWeapon == 'Spear':
+
+                    Spear(self, self.player)
+
+                elif self.currentWeapon == 'Bow':
+
+                    self.player.bow()
+
+                    if self.player.arrowCount > 0:
+
+                        self.player.arrowCount -= 1
+
+                        Arrow(self, self.player)
+
+                elif self.currentWeapon == 'Magic':
+
+                    if self.player.mana > 0:
+
+                        self.player.mana -= 10
+
+                        self.magic = Magic(self, self.player)
+
+    ####################
+    # UPDATE FUNCTIONS
+    ####################
+
     def update(self):
 
-        if self.openInventory:
+        self.quitButton = pygame.Rect(displayWidth - 100, displayHeight - 75, 150, 100)
+
+        self.retryButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 - 100, 300, 100)
+
+        self.restartButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 + 50, 300, 100)
+
+        self.startButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 - 50, 300, 100)
+
+        self.resumeButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 - 100, 300, 100)
+
+        if self.gameOver or self.win:
+
+            if self.retryButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Retry'
+
+            elif self.restartButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Restart'
+
+            elif self.quitButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Quit'
+
+            else:
+
+                self.highlight = None
+        
+        elif self.menu:
+
+            pygame.mouse.set_visible(True)
+
+            if self.started:
+                
+                self.helpButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 + 200, 300, 100)
+
+            else:
+
+                self.helpButton = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 + 150, 300, 100)
+
+            if self.startButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Start'
+
+            elif self.resumeButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Resume'
+
+            elif self.restartButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Restart'
+
+            elif self.helpButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Help'
+            
+            elif self.quitButton.collidepoint(self.mousePos):
+
+                self.highlight = 'Quit'
+
+            else:
+
+                self.highlight = None
+
+        elif self.openInventory:
 
             self.spearBox = pygame.Rect(0, 0, 300, 100)
 
-            self.arrowBox = pygame.Rect(0, 100, 300, 200)
+            self.arrowBox = pygame.Rect(0, 100, 300, 100)
 
-            self.magicBox = pygame.Rect(0, 200, 300, 300)
+            self.magicBox = pygame.Rect(0, 200, 300, 100)
 
             pygame.mouse.set_visible(True)
 
@@ -354,29 +599,80 @@ class Game:
 
                 self.player.health -= hit.damage
 
-    def drawInventory(self):
 
-        pygame.draw.line(self.display, (100, 100, 100), (700, 0), (700, displayHeight))
+    def draw_grid(self):
+        for x in range(0, displayWidth, tiles):
+            pygame.draw.line(self.display, BLACK, (x, 0), (x, displayHeight))
+        for y in range(0, displayHeight, tiles):
+            pygame.draw.line(self.display, BLACK, (0, y), (displayWidth, y))
+
+    ##################
+    # DRAW FUNCTIONS
+    ##################
+
+    def draw(self):
+
+        if self.gameOver:
+
+            self.display.fill(BLACK)
+
+            self.drawGameOver()
+
+        elif self.win:
+
+            self.display.fill(WHITE)
+
+            self.drawGameWin()
+        
+        elif self.menu:
+
+            self.display.fill(GREY)
+
+            self.drawMenu()
+
+        elif self.helpScreen:
+
+            self.display.fill(WHITE)
+
+            self.drawHelp()
+
+        elif self.openInventory:
+
+            self.display.fill(BLACK)
+
+            self.drawInventory()
+
+        else:
+
+            self.display.blit(self.background, (0, 0))
+
+            self.draw_grid()
+
+            self.allSprites.draw(self.display)
+
+        pygame.display.flip()
+
+    def drawInventory(self):
 
         playerStatBox = pygame.Rect(700, 0, 324, 400)
 
         healthText = pygame.font.Font(None, 40)
 
-        health = healthText.render(f'Health: {self.player.health}', True, BLACK)
+        health = healthText.render(f'Health: {self.player.health}', True, WHITE)
 
         manaText = pygame.font.Font(None, 40)
 
-        mana = manaText.render(f'Mana: {self.player.mana}', True, BLACK)
+        mana = manaText.render(f'Mana: {self.player.mana}', True, WHITE)
 
         arrowText = pygame.font.Font(None, 40)
 
-        arrows = arrowText.render(f'Arrows: {self.player.arrowCount}', True, BLACK)
+        arrows = arrowText.render(f'Arrows: {self.player.arrowCount}', True, WHITE)
 
         spikeText = pygame.font.Font(None, 40)
 
-        spikes = spikeText.render(f'Spikes: {self.player.spikeCount}', True, BLACK)        
+        spikes = spikeText.render(f'Spikes: {self.player.spikeCount}', True, WHITE)        
 
-        pygame.draw.rect(self.display, BLACK, playerStatBox, 2)
+        pygame.draw.rect(self.display, WHITE, playerStatBox, 2)
 
         self.display.blit(health, (800, 50))
 
@@ -386,44 +682,403 @@ class Game:
 
         self.display.blit(spikes, (800, 200))
 
+        spearSurface = pygame.Surface((295, 95))
+
+        arrowSurface = pygame.Surface((295, 95))
+
+        magicSurface = pygame.Surface((295, 95))
+
+        spearSurface.fill(BLACK)
+
+        arrowSurface.fill(BLACK)
+
+        magicSurface.fill(BLACK)
+
+        if self.highlight == 'Spear':
+
+            spearSurface.fill(GREY)
+
+        elif self.highlight == 'Bow':
+
+            arrowSurface.fill(GREY)
+
+        elif self.highlight == 'Magic':
+
+            magicSurface.fill(GREY)
+
         spearText = pygame.font.Font(None, 40)
 
-        spear = spearText.render('Spear', True, BLACK)
+        spear = spearText.render('Spear', True, WHITE)
 
-        pygame.draw.rect(self.display, BLACK, self.spearBox, 2)
+        pygame.draw.rect(self.display, WHITE, self.spearBox)
 
-        self.display.blit(spear, (110, 35))
+        self.display.blit(spearSurface, (0, 0))
+
+        self.display.blit(spear, (100, 35))
 
         arrowText = pygame.font.Font(None, 40)
 
-        arrow = arrowText.render('Bow and Arrow', True, BLACK)
+        arrow = arrowText.render('Bow and Arrow', True, WHITE)
 
-        pygame.draw.rect(self.display, BLACK, self.arrowBox, 2)
+        pygame.draw.rect(self.display, WHITE, self.arrowBox)
 
-        self.display.blit(arrow, (50, 135))
+        self.display.blit(arrowSurface, (0, 100))
+
+        self.display.blit(arrow, (40, 135))
 
         magicText = pygame.font.Font(None, 40)
 
-        magic = magicText.render('Magic', True, BLACK)
+        magic = magicText.render('Magic', True, WHITE)
 
-        pygame.draw.rect(self.display, BLACK, self.magicBox, 2)
+        pygame.draw.rect(self.display, WHITE, self.magicBox)
 
-        self.display.blit(magic, (110, 235))
+        self.display.blit(magicSurface, (0, 200))
 
+        self.display.blit(magic, (100, 235))
 
-    def draw(self):
+    def drawMenu(self):
 
-        self.display.fill(WHITE)
+        titleFont = pygame.font.Font(None, 200)
 
-        if self.openInventory:
+        titleText = titleFont.render('Generic RPG', True, (128, 0, 0))
 
-            self.drawInventory()
+        titleSurface = pygame.Surface((875, 150))
+
+        quitFont = pygame.font.Font(None, 50)
+
+        quitText = quitFont.render('Quit', True, BLACK)
+
+        quitSurface = pygame.Surface((145, 95))
+
+        helpFont = pygame.font.Font(None, 60)
+
+        helpText = helpFont.render('Instructions', True, BLACK)
+
+        helpSurface = pygame.Surface((295, 95))
+
+        startSurface = pygame.Surface((295, 95))
+
+        resumeSurface = pygame.Surface((295, 95))
+
+        restartSurface = pygame.Surface((295, 95))
+
+        titleSurface.fill(BROWN)
+
+        startSurface.fill(BROWN)
+
+        resumeSurface.fill(BROWN)
+
+        restartSurface.fill(BROWN)
+
+        helpSurface.fill(BROWN)
+
+        quitSurface.fill(BROWN)
+
+        if self.highlight == 'Start':
+
+            startSurface.fill(GREY)
+
+        elif self.highlight == 'Resume':
+
+            resumeSurface.fill(GREY)
+
+        elif self.highlight == 'Restart':
+
+            restartSurface.fill(GREY)
+
+        elif self.highlight == 'Help':
+
+            helpSurface.fill(GREY)
+
+        elif self.highlight == 'Quit':
+
+            quitSurface.fill(GREY)
+
+        if self.started:
+
+            resumeFont = pygame.font.Font(None, 100)
+
+            resumeText = resumeFont.render('Resume', True, BLACK)
+
+            restartFont = pygame.font.Font(None, 100)
+
+            restartText = restartFont.render('Restart', True, BLACK)
+
+            pygame.draw.rect(self.display, BLACK, self.resumeButton, 5)
+
+            pygame.draw.rect(self.display, BLACK, self.restartButton, 5)
+
+            pygame.draw.rect(self.display, BLACK, self.helpButton, 5)
+
+            self.display.blit(resumeSurface, (displayWidth // 2 - 147, displayHeight // 2 - 97))
+
+            self.display.blit(resumeText, (displayWidth // 2 - 133, displayHeight // 2 - 85))
+
+            self.display.blit(restartSurface, (displayWidth // 2 - 147, displayHeight // 2 + 52))
+
+            self.display.blit(restartText, (displayWidth // 2 - 127, displayHeight // 2 + 65))
+
+            self.display.blit(helpSurface, (displayWidth // 2 - 147, displayHeight // 2 + 202))
+
+            self.display.blit(helpText, (displayWidth // 2 - 127, displayHeight // 2 + 240))
 
         else:
 
-            self.allSprites.draw(self.display)
+            startFont = pygame.font.Font(None, 100)
 
-        pygame.display.flip()
+            startText = startFont.render('Start', True, BLACK)
+
+            pygame.draw.rect(self.display, BLACK, self.startButton, 5)
+
+            pygame.draw.rect(self.display, BLACK, self.helpButton, 5)
+
+            self.display.blit(startSurface, (displayWidth // 2 - 147, displayHeight // 2 - 47))
+
+            self.display.blit(startText, (displayWidth // 2 - 85, displayHeight // 2 - 30))
+
+            self.display.blit(helpSurface, (displayWidth // 2 - 147, displayHeight // 2 + 152))
+
+            self.display.blit(helpText, (displayWidth // 2 - 125, displayHeight // 2 + 190))
+
+        self.display.blit(titleSurface, (displayWidth // 2 - 435, displayHeight // 2 - 315))
+
+        self.display.blit(titleText, (displayWidth // 2 - 435, displayHeight // 2 - 300))
+
+        self.display.blit(quitSurface, (displayWidth - 97, displayHeight - 73))
+
+        self.display.blit(quitText, (displayWidth - 85, displayHeight - 50))
+
+        pygame.draw.rect(self.display, BLACK, self.quitButton, 5)
+
+    def drawHelp(self):
+
+        help1Font = pygame.font.Font(None, 40)
+
+        help1Text = help1Font.render('Objective: Get to the next room through the door by any means possible!', True, BLACK)
+
+        help2Font = pygame.font.Font(None, 40)
+
+        help2Text = help2Font.render('Controls:', True, BLACK)
+
+        help3Font = pygame.font.Font(None, 40)
+
+        help3Text = help3Font.render('WASD to move up, left, down, and right', True, BLACK)
+
+        help4Font = pygame.font.Font(None, 40)
+
+        help4Text = help4Font.render('Left Click: Use Sword (No cooldown)', True, BLACK)
+
+        help5Font = pygame.font.Font(None, 40)
+
+        help5Text = help5Font.render('Right Click: Use special weapon (3 second cooldown)', True, BLACK)
+
+        help6Font = pygame.font.Font(None, 40)
+
+        help6Text = help6Font.render('Space Bar: Drop spikes', True, BLACK)
+
+        help7Font = pygame.font.Font(None, 40)
+
+        help7Text = help7Font.render('E: Bring up inventory and switch special weapons you can ', True, BLACK)
+
+        help8Font = pygame.font.Font(None, 40)
+
+        help8Text = help8Font.render('select using your mouse', True, BLACK)
+
+        help9Font = pygame.font.Font(None, 40)
+
+        help9Text = help9Font.render('Use your sword on doors and switches to activate them!', True, BLACK)
+        
+        help10Font = pygame.font.Font(None, 40)
+        
+        help10Text = help10Font.render('Use Escape now to go back to the main menu', True, BLACK)
+
+        help11Font = pygame.font.Font(None, 40)
+
+        help11Text = help11Font.render('You can also use escape to go to the main menu during the game', True, BLACK)
+
+        self.display.blit(help1Text, (10, 25))
+
+        self.display.blit(help2Text, (10, 100))
+
+        self.display.blit(help3Text, (10, 150))
+
+        self.display.blit(help4Text, (10, 200))
+
+        self.display.blit(help5Text, (10, 250))
+
+        self.display.blit(help6Text, (10, 300))
+
+        self.display.blit(help7Text, (10, 350))
+
+        self.display.blit(help8Text, (10, 400))
+
+        self.display.blit(help9Text, (10, 500))
+
+        self.display.blit(help10Text, (10, 550))
+
+        self.display.blit(help11Text, (10, 600))
+
+    def drawGameOver(self):
+        
+        titleFont = pygame.font.Font(None, 200)
+
+        titleText = titleFont.render('You Died', True, (128, 0, 0))
+
+        titleSurface = pygame.Surface((875, 150))
+
+        quitFont = pygame.font.Font(None, 50)
+
+        quitText = quitFont.render('Quit', True, BLACK)
+
+        quitSurface = pygame.Surface((145, 95))
+
+        retrySurface = pygame.Surface((295, 95))
+
+        restartSurface = pygame.Surface((295, 95))
+
+        titleSurface.fill(BROWN)
+
+        retrySurface.fill(BROWN)
+
+        restartSurface.fill(BROWN)
+
+        quitSurface.fill(BROWN)
+
+        if self.highlight == 'Retry':
+
+            retrySurface.fill(GREY)
+
+        elif self.highlight == 'Restart':
+
+            restartSurface.fill(GREY)
+
+        elif self.highlight == 'Quit':
+
+            quitSurface.fill(GREY)
+
+        retryFont = pygame.font.Font(None, 100)
+
+        retryText = retryFont.render('Retry?', True, BLACK)
+
+        restartFont = pygame.font.Font(None, 100)
+
+        restartText = restartFont.render('Restart', True, BLACK)
+
+        pygame.draw.rect(self.display, BLACK, self.retryButton, 5)
+
+        pygame.draw.rect(self.display, BLACK, self.restartButton, 5)
+
+        self.display.blit(retrySurface, (displayWidth // 2 - 147, displayHeight // 2 - 97))
+
+        self.display.blit(retryText, (displayWidth // 2 - 115, displayHeight // 2 - 85))
+
+        self.display.blit(restartSurface, (displayWidth // 2 - 147, displayHeight // 2 + 52))
+
+        self.display.blit(restartText, (displayWidth // 2 - 127, displayHeight // 2 + 65))
+
+        self.display.blit(titleSurface, (displayWidth // 2 - 435, displayHeight // 2 - 315))
+
+        self.display.blit(titleText, (displayWidth // 2 - 325, displayHeight // 2 - 300))
+
+        self.display.blit(quitSurface, (displayWidth - 97, displayHeight - 73))
+
+        self.display.blit(quitText, (displayWidth - 85, displayHeight - 50))
+
+        pygame.draw.rect(self.display, BLACK, self.quitButton, 5)
+
+    def drawGameWin(self):
+
+        titleFont = pygame.font.Font(None, 100)
+
+        titleText = titleFont.render('You completed the game!', True, (0, 255, 0))
+
+        titleSurface = pygame.Surface((875, 150))
+
+        quitFont = pygame.font.Font(None, 50)
+
+        quitText = quitFont.render('Quit', True, BLACK)
+
+        quitSurface = pygame.Surface((145, 95))
+
+        restartSurface = pygame.Surface((295, 95))
+
+        scoreTitleFont = pygame.font.Font(None, 50)
+
+        scoreTitleText = scoreTitleFont.render('Highscores:', True, BLACK)
+
+        score1Font = pygame.font.Font(None, 50)
+
+        score1Text = score1Font.render(f'1: {highscores[0]}', True, BLACK)
+
+        score2Font = pygame.font.Font(None, 50)
+
+        score2Text = score1Font.render(f'2: {highscores[1]}', True, BLACK)
+
+        score3Font = pygame.font.Font(None, 50)
+
+        score3Text = score1Font.render(f'3: {highscores[2]}', True, BLACK)
+
+        score4Font = pygame.font.Font(None, 50)
+
+        score4Text = score1Font.render(f'4: {highscores[3]}', True, BLACK)
+
+        score5Font = pygame.font.Font(None, 50)
+
+        score5Text = score1Font.render(f'5: {highscores[4]}', True, BLACK)
+
+        scoreRect = pygame.Rect(displayWidth // 2 - 150, displayHeight // 2 + 160, 300, 500)
+
+        titleSurface.fill(BROWN)
+
+        restartSurface.fill(BROWN)
+
+        quitSurface.fill(BROWN)
+
+        if self.highlight == 'Restart':
+
+            restartSurface.fill(GREY)
+
+        elif self.highlight == 'Quit':
+
+            quitSurface.fill(GREY)
+
+        restartFont = pygame.font.Font(None, 100)
+
+        restartText = restartFont.render('Restart', True, BLACK)
+
+        pygame.draw.rect(self.display, BLACK, self.restartButton, 5)
+
+        pygame.draw.rect(self.display, BROWN, scoreRect)
+
+        self.display.blit(scoreTitleText, (displayWidth // 2 - 127, displayHeight // 2 + 170))
+
+        self.display.blit(score1Text, (displayWidth // 2 - 127, displayHeight // 2 + 205))
+
+        self.display.blit(score2Text, (displayWidth // 2 - 127, displayHeight // 2 + 240))
+
+        self.display.blit(score3Text, (displayWidth // 2 - 127, displayHeight // 2 + 275))
+
+        self.display.blit(score4Text, (displayWidth // 2 - 127, displayHeight // 2 + 308))
+
+        self.display.blit(score5Text, (displayWidth // 2 - 127, displayHeight // 2 + 343))
+
+        self.display.blit(restartSurface, (displayWidth // 2 - 147, displayHeight // 2 + 52))
+
+        self.display.blit(restartText, (displayWidth // 2 - 127, displayHeight // 2 + 65))
+
+        self.display.blit(titleSurface, (displayWidth // 2 - 435, displayHeight // 2 - 315))
+
+        self.display.blit(titleText, (displayWidth // 2 - 420, displayHeight // 2 - 290))
+
+        self.display.blit(quitSurface, (displayWidth - 97, displayHeight - 73))
+
+        self.display.blit(quitText, (displayWidth - 85, displayHeight - 50))
+
+        pygame.draw.rect(self.display, BLACK, self.quitButton, 5)
+
+    ########################
+    # PATHFINDING ALGORITHM
+    ########################
 
     def findObstacles(self, x, y):
 
@@ -459,28 +1114,6 @@ class Game:
 
         return neighbors
 
-    def vectorToInteger(self, vector):
-
-        return (int(vector.x), int(vector.y))
-
-    def mergeDictionaries(self, dict1, dict2):
-
-        newDict = copy.deepcopy(dict1)
-
-        for key, value in dict1.items():
-
-            # if math.abs(value.x) < math.abs(dict2[key].x):
-            #
-            #     newDict[key].x = 0
-            #
-            # if math.abs(value.y) < math.abs(dict2[key].y):
-            #
-            #     newDict[key].y = 0
-            
-            newDict[key] = value + dict2[key]
-
-        return newDict
-
     # From kidscancode.org/lessons/
 
     def breadthFirstSearch(self, start):
@@ -507,9 +1140,27 @@ class Game:
 
         return path
 
-##########
-# Classes
-##########
+    ###########################
+    # Helper functions
+    ###########################
+
+    def vectorToInteger(self, vector):
+
+        return (int(vector.x), int(vector.y))
+
+    def mergeDictionaries(self, dict1, dict2):
+
+        newDict = copy.deepcopy(dict1)
+
+        for key, value in dict1.items():
+            
+            newDict[key] = value + dict2[key]
+
+        return newDict
+
+###############
+# Player
+###############
 
 class Player(pygame.sprite.Sprite):
 
@@ -523,7 +1174,7 @@ class Player(pygame.sprite.Sprite):
 
         self.orientation = 'Down'
 
-        self.image = getImageOrientation(self.orientation)
+        self.image = getPlayerImageOrientation(self.orientation)
 
         self.rect = self.image.get_rect()
 
@@ -542,6 +1193,8 @@ class Player(pygame.sprite.Sprite):
         self.mana = 100
 
         self.spikeCount = 5
+
+        self.stats = {'health': 100, 'arrowCount': 10, 'mana': 100, 'spikeCount': 5}
 
     def move(self, pressedKeys):
 
@@ -626,7 +1279,7 @@ class Player(pygame.sprite.Sprite):
 
             self.kill()
 
-            self.game.running = False
+            self.game.gameOver = True
 
         frameTime = self.game.clock.get_time() / 1000
 
@@ -636,7 +1289,7 @@ class Player(pygame.sprite.Sprite):
 
         else:
 
-            self.image = getImageOrientation(self.orientation)
+            self.image = getPlayerImageOrientation(self.orientation)
 
         self.pos += self.vel * frameTime
 
@@ -648,6 +1301,10 @@ class Player(pygame.sprite.Sprite):
 
         self.obstacleCollide(self, 'dy')
 
+###################
+# Enemies
+###################
+
 class BasicEnemy(pygame.sprite.Sprite):
 
     def __init__(self, game, x, y):
@@ -658,7 +1315,7 @@ class BasicEnemy(pygame.sprite.Sprite):
 
         self.game = game
         
-        self.image = getImageOrientation('Up')
+        self.image = getEnemyImage('basic')
 
         self.rect = self.image.get_rect()
 
@@ -668,13 +1325,15 @@ class BasicEnemy(pygame.sprite.Sprite):
 
         self.rect.center = self.pos
 
-        self.health = 100
+        self.health = 500
 
         self.damage = 25
 
     def update(self):
 
         if self.health <= 0:
+
+            self.game.score += 500
 
             self.kill()
 
@@ -706,7 +1365,7 @@ class RangedEnemy(pygame.sprite.Sprite):
 
         self.game = game
 
-        self.image = getImageOrientation('Down')
+        self.image = getEnemyImage('ranged')
 
         self.rect = self.image.get_rect()
 
@@ -716,7 +1375,7 @@ class RangedEnemy(pygame.sprite.Sprite):
 
         self.rect.center = self.pos
 
-        self.health = 75
+        self.health = 250
 
         self.damage = 20
 
@@ -747,6 +1406,8 @@ class RangedEnemy(pygame.sprite.Sprite):
     def update(self):
 
         if self.health <= 0:
+
+            self.game.score += 250
 
             self.kill()
 
@@ -794,7 +1455,7 @@ class Boss(RangedEnemy):
 
         self.game = game
         
-        self.image = getImageOrientation('Down')
+        self.image = getEnemyImage('boss')
 
         self.rect = self.image.get_rect()
 
@@ -808,7 +1469,7 @@ class Boss(RangedEnemy):
 
         self.vel = vector(0, 0)
 
-        self.health = 100
+        self.health = 1
 
         self.damage = 25
 
@@ -830,18 +1491,26 @@ class Boss(RangedEnemy):
 
         if self.health <= 0:
 
-            self.kill
+            self.kill()
 
-            print('You won!')
+            self.game.score += 1000
 
-        if (self.health > 400) and (
+            highscores.append(self.game.score)
+
+            self.game.win = True
+
+        if (self.health > 800) and (
             currentTime - self.lastAttack >= 500):
 
             self.lastAttack = currentTime
 
+            self.move()
+
+            self.acceleration *= -1
+
             self.attack()
 
-        elif (100 < self.health < 400):
+        elif (200 < self.health < 800):
 
             self.move()
 
@@ -865,8 +1534,6 @@ class Boss(RangedEnemy):
 
                     self.game.player.obstacleCollide(self, 'dy')
 
-                    print('stop!')
-
             else:
 
                 self.vel += self.acceleration
@@ -879,7 +1546,7 @@ class Boss(RangedEnemy):
 
                 self.rect.center = self.pos
 
-        elif self.health < 100:
+        elif self.health < 200:
 
             self.move()
 
@@ -911,9 +1578,9 @@ class EnemyProjectile(pygame.sprite.Sprite):
 
         self.direction = direction
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/0.png'
+        self.originalImage = getWeaponImage('Arrow')
 
-        self.image = pygame.image.load(self.originalImage).convert()
+        self.image = pygame.transform.rotate(self.originalImage, 180)
 
         self.rect = self.image.get_rect()
 
@@ -935,15 +1602,37 @@ class EnemyProjectile(pygame.sprite.Sprite):
 
         if pygame.sprite.spritecollide(self, self.game.weapons, True):
 
+            self.game.score += 10
+
             self.kill()
 
         self.pos += self.direction * 10
 
         self.rect.center = self.pos
 
+###################
+# Obstacles
+###################
+
+class Floor(pygame.sprite.Sprite):
+
+    def __init__(self, game, x, y, image):
+
+        self.groups = game.allSprites
+
+        pygame.sprite.Sprite.__init__(self, self.groups)
+
+        self.image = image
+
+        self.rect = self.image.get_rect()
+
+        self.pos = vector(x, y) * tiles
+
+        self.rect.topleft = self.pos
+
 class Door(pygame.sprite.Sprite):
 
-    def __init__(self, game, x, y, purpose = 'open'):
+    def __init__(self, game, x, y, image, purpose = 'open'):
 
         self.groups = game.allSprites, game.obstacles, game.interactable
 
@@ -951,7 +1640,9 @@ class Door(pygame.sprite.Sprite):
 
         self.game = game
 
-        self.image = pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/2.png').convert()
+        self.originalImage = image
+
+        self.image = self.originalImage
 
         self.rect = self.image.get_rect()
 
@@ -987,13 +1678,13 @@ class Door(pygame.sprite.Sprite):
 
             self.add(self.game.obstacles)
 
-            self.image = pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/2.png')
+            self.image = self.originalImage
 
             self.health = 0
 
 class Obstacle(pygame.sprite.Sprite):
 
-    def __init__(self, game, x, y):
+    def __init__(self, game, x, y, image):
 
         self.groups = game.allSprites, game.obstacles
 
@@ -1001,7 +1692,7 @@ class Obstacle(pygame.sprite.Sprite):
 
         self.game = game
 
-        self.image = pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/0.png').convert()
+        self.image = image
 
         self.rect = self.image.get_rect()
 
@@ -1011,7 +1702,7 @@ class Obstacle(pygame.sprite.Sprite):
 
 class Hole(Obstacle):
 
-    def __init__(self, game, x, y):
+    def __init__(self, game, x, y, image):
 
         self.groups = game.allSprites, game.enemies
 
@@ -1019,7 +1710,7 @@ class Hole(Obstacle):
 
         self.game = game
 
-        self.image = pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/1.png').convert()
+        self.image = image 
 
         self.rect = self.image.get_rect()
 
@@ -1031,7 +1722,7 @@ class Hole(Obstacle):
 
 class Blocker(Obstacle):
 
-    def __init__(self, game, x, y):
+    def __init__(self, game, x, y, image):
 
         self.groups = game.allSprites, game.obstacles, game.blocker
 
@@ -1039,7 +1730,7 @@ class Blocker(Obstacle):
 
         self.game = game
         
-        self.image = pygame.image.load('c:/Users/willh/Desktop/112-project/images/Cave/0.png').convert()
+        self.image = image
 
         self.rect = self.image.get_rect()
 
@@ -1069,6 +1760,10 @@ class Blocker(Obstacle):
 
             self.game.walls.append(self.pos)
 
+################
+# Weapons
+################
+
 # Replace with sword eventually
 class Spear(pygame.sprite.Sprite):
 
@@ -1084,9 +1779,9 @@ class Spear(pygame.sprite.Sprite):
 
         self.direction = player.orientation
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spear.png'
+        self.originalImage = getWeaponImage('Spear')
 
-        self.image = pygame.image.load(self.originalImage).convert()
+        self.image = self.originalImage
 
         self.rect = self.image.get_rect()
 
@@ -1108,25 +1803,25 @@ class Spear(pygame.sprite.Sprite):
 
             offset = vector(0, 30)
 
-            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert(), 240)
+            self.image = pygame.transform.rotate(self.originalImage, 240)
 
         elif self.direction == 'Up':
 
             offset = vector(-10, -30)
 
-            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert(), 60)
+            self.image = pygame.transform.rotate(self.originalImage, 60)
 
         elif self.direction == 'Right':
 
             offset = vector(20, -10)
 
-            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert(), 330)
+            self.image = pygame.transform.rotate(self.originalImage, 330)
 
         elif self.direction == 'Left':
 
             offset = vector(-50, 0)
 
-            self.image = pygame.transform.rotate(pygame.image.load(self.originalImage).convert(), 150)
+            self.image = pygame.transform.rotate(self.originalImage, 150)
 
         self.rect.topleft = self.player.pos + offset
 
@@ -1148,9 +1843,9 @@ class Arrow(pygame.sprite.Sprite):
 
         self.direction = self.player.orientation
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/0.png'
+        self.originalImage = getWeaponImage('Arrow')
 
-        self.image = pygame.image.load(self.originalImage).convert()
+        self.image = self.originalImage
 
         self.rect = self.image.get_rect()
 
@@ -1202,9 +1897,7 @@ class Magic(pygame.sprite.Sprite):
 
         self.player = player
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spikes.png'
-
-        self.image = pygame.image.load(self.originalImage).convert()
+        self.image = getWeaponImage('Magic')
 
         self.rect = self.image.get_rect()
 
@@ -1220,9 +1913,16 @@ class Magic(pygame.sprite.Sprite):
 
     def update(self):
 
+        self.currentTime = pygame.time.get_ticks()
+
+        if self.currentTime - self.spawnTime > 1000:
+
+            self.player.mana -= 10
+
+            self.spawnTime = self.currentTime
+
         if pygame.sprite.spritecollideany(self, self.game.obstacles) or (
-            pygame.time.get_ticks() - self.spawnTime >= 3000
-        ):
+            self.player.mana <= 0):
 
             self.kill()
 
@@ -1246,9 +1946,9 @@ class Spikes(pygame.sprite.Sprite):
 
         self.player = player
 
-        self.originalImage = 'c:/Users/willh/Desktop/112-project/images/weapon/spikes.png'
+        self.originalImage = getWeaponImage('Spikes')
 
-        self.image = pygame.image.load(self.originalImage).convert()
+        self.image = self.originalImage
 
         self.rect = self.image.get_rect()
 
