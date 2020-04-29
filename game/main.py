@@ -155,6 +155,10 @@ class Game:
 
         self.deaths = 0
 
+        self.playerHealth = 0
+
+        self.playerDamage = 0
+
     ######################
     # GAME INITIALIZATION
     ######################
@@ -326,7 +330,7 @@ class Game:
             # View
             self.draw()
 
-            self.clock.tick(60)
+            self.clock.tick(30)
 
     ####################
     # EVENT FUNCTIONS
@@ -374,7 +378,7 @@ class Game:
                 
                 elif event.key == K_m:
 
-                    if self.currentRoom < 4:
+                    if self.currentRoom < 10:
 
                         self.currentRoom += 1
 
@@ -480,11 +484,15 @@ class Game:
 
                 if self.highlight == 'Health':
 
-                    self.player.health += 50
+                    self.playerHealth += 100
+
+                    self.player.health += self.playerHealth
 
                 elif self.highlight == 'Damage':
 
-                    self.player.damage += 50
+                    self.playerDamage += 50
+
+                    self.player.damage += self.playerDamage
 
                 elif self.highlight == 'Projectile':
 
@@ -652,7 +660,7 @@ class Game:
 
             for enemy, weapon in hits.items():
 
-                enemy.health -= weapon[0].damage
+                enemy.health -= weapon[0].damage + self.playerDamage
 
                 enemy.knockback = weapon[0].knockback
 
@@ -1683,6 +1691,8 @@ class Boss(RangedEnemy):
 
     def update(self):
 
+        self.attackDir = vector.normalize(self.game.player.pos - self.pos)
+
         currentTime = pygame.time.get_ticks()
 
         if self.health <= 0:
@@ -2075,7 +2085,7 @@ class Arrow(pygame.sprite.Sprite):
         
         self.damage = 30
 
-        self.knocback = 2
+        self.knockack = 2
 
     def update(self):
 
